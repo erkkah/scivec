@@ -1,5 +1,7 @@
 #pragma once
 #include <span>
+#include <memory>
+#include "tigr.h"
 
 enum SCICommand {
     setVisualColor = 0xf0,
@@ -35,10 +37,13 @@ enum SCIExtendedCommand {
 using SCIPalette = std::array<std::pair<uint8_t, uint8_t>, 40>;
 
 struct SCIPicParser {
-    SCIPicParser(std::span<const uint8_t> data) : _data(data) {
+    SCIPicParser(std::span<const uint8_t> data) : _data(data), _bmp(tigrBitmap(320, 200), &tigrFree) {
     }
 
     void parse();
+    Tigr* bitmap() {
+        return _bmp.get();
+    }
 
    private:
     void parseExtended(uint8_t cmd);
@@ -53,6 +58,8 @@ struct SCIPicParser {
     bool nextIsCommand() const;
     std::pair<int, int> readCoordinate();
 
+    void line(int x0, int y0, int x1, int y1);
+
     std::span<const uint8_t> _data;
     size_t _pos{ 0 };
     uint8_t _visualColor{ 0 };
@@ -60,4 +67,5 @@ struct SCIPicParser {
     uint8_t _controlColor{ 0 };
     uint8_t _patternFlags{ 0 };
     std::array<SCIPalette, 4> _palettes;
+    std::unique_ptr<Tigr, decltype(&tigrFree)> _bmp;
 };

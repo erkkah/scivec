@@ -22,9 +22,24 @@ std::vector<uint8_t> loadFile(const char* fileName) {
     return data;
 }
 
+void show(Tigr* bmp) {
+    auto* screen = tigrWindow(320, 200, "SCI Picture", 0);
+
+    while (!tigrClosed(screen)) {
+        if (tigrKeyDown(screen, TK_ESCAPE)) {
+            break;
+        }
+        tigrBlit(screen, bmp, 0, 0, 0, 0, bmp->w, bmp->h);
+        tigrUpdate(screen);
+    }
+    tigrFree(screen);
+}
+
 int main(int argc, const char** argv) {
     const auto data = loadFile(argv[1]);
     SCIPicParser parser(data);
     parser.parse();
+
+    show(parser.bitmap());
     return 0;
 }
