@@ -58,13 +58,26 @@ struct SCIPicParser {
     bool nextIsCommand() const;
     std::pair<int, int> readCoordinate();
 
-    void line(int x0, int y0, int x1, int y1);
+    void plot(int x, int y);
+    void drawLine(int x0, int y0, int x1, int y1);
+    void floodFill(int x, int y);
+    void drawPattern(int x, int y, int pattern);
+
+    std::uint8_t peek(size_t offset) const;
+    std::uint8_t read();
+    void skip(size_t count);
+    bool atEnd() const;
+    void reset();
+
+    bool _drawLines{ true };
+    bool _drawPatterns{ true };
+    bool _drawFills{ true };
 
     std::span<const uint8_t> _data;
     size_t _pos{ 0 };
-    uint8_t _visualColor{ 0 };
-    uint8_t _priorityColor{ 0 };
-    uint8_t _controlColor{ 0 };
+    bool _visualEnabled{ true };
+    uint8_t _paletteIndex{ 0 };
+    uint8_t _color{ 0 };
     uint8_t _patternFlags{ 0 };
     std::array<SCIPalette, 4> _palettes;
     std::unique_ptr<Tigr, decltype(&tigrFree)> _bmp;
