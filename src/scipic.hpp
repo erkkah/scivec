@@ -1,9 +1,12 @@
 #pragma once
 #include <span>
 #include <memory>
+#include <vector>
 #include "tigr.h"
+#include "image.hpp"
+#include "palette.hpp"
 
-enum SCICommand {
+enum SCICommandCode {
     setVisualColor = 0xf0,
     disableVisual = 0xf1,
     setPriorityColor = 0xf2,
@@ -22,7 +25,7 @@ enum SCICommand {
     pictureEnd = 0xff,
 };
 
-enum SCIExtendedCommand {
+enum SCIExtendedCommandCode {
     setPaletteEntries = 0,
     setEntirePalette = 1,
     setMonoPalette = 2,
@@ -34,7 +37,12 @@ enum SCIExtendedCommand {
     setPriorityBands = 8,
 };
 
-using SCIPalette = std::array<std::pair<uint8_t, uint8_t>, 40>;
+struct SCICommand {
+    SCICommandCode code;
+    std::vector<uint8_t> params;
+};
+
+using SCIPalette = std::array<PaletteColor, 40>;
 
 struct SCIPicParser {
     SCIPicParser(std::span<const uint8_t> data) : _data(data), _bmp(tigrBitmap(320, 200), &tigrFree) {
@@ -81,4 +89,16 @@ struct SCIPicParser {
     uint8_t _patternFlags{ 0 };
     std::array<SCIPalette, 4> _palettes;
     std::unique_ptr<Tigr, decltype(&tigrFree)> _bmp;
+};
+
+struct SCIPicVectorizer {
+    SCIPicVectorizer(const EGAImage& bmp) : _bmp(bmp), _colors(buildPalette(bmp)) {
+        printf("Found %zu distinct palette colors\n", _colors.size());
+    }
+
+    void scan();
+
+   private:
+    const EGAImage& _bmp;
+    const Palette _colors;
 };

@@ -8,8 +8,11 @@ project(scivec)
 set(CMAKE_CXX_STANDARD 20)
 
 add_executable(scivec
+    src/image.cpp
     src/main.cpp
-    src/scipic.cpp
+    src/palette.cpp
+    src/scipicparser.cpp
+    src/scipicvectorizer.cpp
 )
 
 target_link_libraries(scivec PRIVATE
@@ -18,17 +21,14 @@ target_link_libraries(scivec PRIVATE
 )
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-
-target_link_libraries(scivec PRIVATE
-    "-framework CoreFoundation"
-)
-
+    target_link_libraries(scivec PRIVATE
+        "-framework CoreFoundation"
+    )
 endif()
 
 include(ExternalProject)
 
 # TIGR
-
 externalproject_add(tigr
     GIT_REPOSITORY https://github.com/erkkah/tigr
     GIT_TAG "v3.1.0"
@@ -61,7 +61,6 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
 endif()
 
 # incbin
-
 externalproject_add(incbin
     GIT_REPOSITORY https://github.com/graphitemaster/incbin
     GIT_TAG "main"
@@ -77,10 +76,10 @@ add_dependencies(scivec incbin)
 ExternalProject_Get_property(incbin SOURCE_DIR)
 set(INCBIN ${SOURCE_DIR})
 
-
 target_include_directories(scivec PUBLIC
     ${TIGR}
     ${INCBIN}
+    ${CMAKE_SOURCE_DIR}/ext
 )
 
 target_sources(scivec PUBLIC

@@ -3,6 +3,7 @@
 
 // http://sci.sierrahelp.com/Documentation/SCISpecifications/16-SCI0-SCI01PICResource.html
 // http://sciwiki.sierrahelp.com/index.php?title=Picture_Resource
+// http://agi.sierrahelp.com/Documentation/Specifications/5-1-PICTURE.html
 
 namespace {
 
@@ -29,25 +30,6 @@ std::string hex(int value) {
     return "0x" + str.str();
 }
 
-std::array<TPixel, 16> egaPalette{ //
-    tigrRGB(0, 0, 0),
-    tigrRGB(0, 0, 159),
-    tigrRGB(0, 159, 0),
-    tigrRGB(0, 159, 159),
-    tigrRGB(159, 0, 0),
-    tigrRGB(127, 0, 159),
-    tigrRGB(159, 79, 0),
-    tigrRGB(159, 159, 159),
-    tigrRGB(79, 79, 79),
-    tigrRGB(79, 79, 255),
-    tigrRGB(0, 255, 79),
-    tigrRGB(79, 255, 255),
-    tigrRGB(255, 79, 79),
-    tigrRGB(255, 79, 255),
-    tigrRGB(255, 255, 79),
-    tigrRGB(255, 255, 255)
-};
-
 constexpr uint8_t patternFlagRectangle = 0x10;
 constexpr uint8_t patternFlagUsePattern = 0x20;
 
@@ -60,7 +42,7 @@ void SCIPicParser::parse() {
         throw std::runtime_error("Invalid SCI resource");
     }
 
-    tigrClear(_bmp.get(), egaPalette[0x0f]);
+    tigrClear(_bmp.get(), EGAImage::palette[0x0f]);
 
     skip(2);
 
@@ -122,7 +104,7 @@ void SCIPicParser::parse() {
                 parseLongPatterns();
                 break;
 
-            case SCICommand::floodFill:
+            case SCICommandCode::floodFill:
                 parseFloodFill();
                 break;
 
@@ -198,9 +180,9 @@ void SCIPicParser::drawLine(int x0, int y0, int x1, int y1) {
 
 void SCIPicParser::plot(int x, int y) {
     const auto col = _palettes.at(_paletteIndex).at(_color);
-    uint8_t effective = ((x + y) % 2) ? col.first : col.second;
+    uint8_t effective = effectiveColor(col, x, y);
 
-    tigrPlot(_bmp.get(), x, y, egaPalette[effective]);
+    tigrPlot(_bmp.get(), x, y, EGAImage::palette[effective]);
 }
 
 void SCIPicParser::floodFill(int x, int y) {
@@ -224,7 +206,7 @@ void SCIPicParser::floodFill(int x, int y) {
         return;
     }
 
-    tigrPlot(_bmp.get(), x, y, egaPalette[fill_col]);
+    tigrPlot(_bmp.get(), x, y, EGAImage::palette[fill_col]);
 
     floodFill(x, y + 1);
     floodFill(x, y - 1);
