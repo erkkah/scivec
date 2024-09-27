@@ -1,59 +1,8 @@
-#include "scipic.hpp"
+#include "scipicvectorizer.hpp"
 #include <cassert>
 #include <span>
 #include <ranges>
 #include <set>
-
-struct PixelRun {
-    PixelRun(size_t start, size_t length, uint8_t color) : start(start), length(length), color(color) {
-    }
-
-    bool overlaps(const PixelRun& other) const {
-        return (other.start >= start && other.start < start + length) ||
-               (other.start + length >= start && other.start + length <= start + length);
-    }
-
-    size_t start;
-    size_t length;
-    uint8_t color;
-};
-
-struct PixelArea {
-    PixelArea(int top, const PixelRun& run) : _top(top) {
-        _rows.push_back(run);
-    }
-
-    PixelArea() {
-    }
-
-    int height() const {
-        return _rows.size();
-    }
-
-    bool matches(const PixelRun& run) {
-        if (_rows.empty()) {
-            return false;
-        }
-        return _rows.back().overlaps(run);
-    }
-
-    void add(const PixelRun& run) {
-        assert(matches(run));
-        _rows.push_back(run);
-    }
-
-    std::span<const PixelRun> rows() const {
-        return _rows;
-    }
-
-    int top() const {
-        return _top;
-    }
-
-   private:
-    int _top;
-    std::vector<PixelRun> _rows;
-};
 
 using PixelRunList = std::vector<PixelRun>;
 
@@ -75,12 +24,13 @@ PixelRunList pixelRuns(int y, std::span<const uint8_t> rowData, const Palette& p
         PaletteColor c(first, second);
 
         auto currentColor = palette.index(c);
+        int skip = 0;
 
         if (currentColor != -1) {
             // A full two-pixel match, so skip a pixel!
-            x++;
+            skip = 1;
         } else {
-            currentColor = palette.match(x, y, first);
+            currentColor = palette.match(x, y, rowData[x]);
         }
 
         if (currentColor == -1) {
@@ -92,6 +42,7 @@ PixelRunList pixelRuns(int y, std::span<const uint8_t> rowData, const Palette& p
             runStart = x;
         }
 
+        x += skip;
         previousColor = currentColor;
     }
 
@@ -122,7 +73,7 @@ std::vector<PixelArea> buildAreas(const std::vector<PixelRunList>& rows) {
     std::set<size_t> previousRowAreas;
     std::set<size_t> currentRowAreas;
 
-    auto matchingArea = [&previousRowAreas, &allAreas](const PixelRun& run) -> size_t {
+    auto matchingArea = [&previousRowAreas, &allAreas](const PixelRun& run) -> int {
         for (auto& area : previousRowAreas) {
             if (allAreas[area].matches(run)) {
                 return area;
@@ -136,6 +87,7 @@ std::vector<PixelArea> buildAreas(const std::vector<PixelRunList>& rows) {
             auto match = matchingArea(run);
             if (match != -1) {
                 auto& area = allAreas.at(match);
+                previousRowAreas.erase(match);
                 currentRowAreas.insert(match);
                 area.add(run);
             } else {
@@ -193,6 +145,40 @@ SCICommand encodeFill(int x, int y, uint8_t color) {
     return SCICommand{ .code = SCICommandCode::floodFill, .params = encodeCoordinate(x, y) };
 }
 
+std::vector<Point> optimizeLines(std::span<Point> coords) {
+    std::vector<Point> result;
+
+    result.push_back(coords.front());
+    int sameXCount = 0;
+    int sameYCount = 0;
+
+    for (const auto& coord : coords.subspan(1)) {
+        auto& last = result.back();
+
+        if (coord.x == last.x) {
+            sameYCount = 0;
+            sameXCount++;
+        } else if (coord.y == last.y) {
+            sameXCount = 0;
+            sameYCount++;
+        } else {
+            sameXCount = 0;
+            sameYCount = 0;
+        }
+
+        if (sameXCount > 2) {
+            last.y = coord.y;
+        } else if (sameYCount > 2) {
+            last.x = coord.x;
+        } else {
+            // Also check for same angle here?
+            result.push_back(coord);
+        }
+    }
+
+    return result;
+}
+
 void convertArea(const PixelArea& area, std::vector<SCICommand>& sink) {
     sink.push_back(encodeVisual(area.rows().front().color));
 
@@ -214,17 +200,35 @@ void convertArea(const PixelArea& area, std::vector<SCICommand>& sink) {
 
         coords.push_back(Point{ .x = static_cast<int>(topLine.start), .y = area.top() });
 
+        int lastX = static_cast<int>(topLine.start + topLine.length - 1);
+
         for (int y = area.top(); const auto& row : rows) {
-            coords.push_back(Point{ .x = static_cast<int>(row.start + row.length - 1), .y = y });
+            int x = static_cast<int>(row.start + row.length - 1);
+            if (x < lastX) {
+                coords.push_back(Point{ .x = x, .y = y - 1 });
+            } else if (x > lastX) {
+                coords.push_back(Point{ .x = lastX, .y = y });
+            }
+            coords.push_back(Point{ .x = x, .y = y });
+            lastX = x;
             y++;
         }
 
-        coords.push_back(Point{ .x = static_cast<int>(bottomLine.start), .y = area.top() + area.height() - 1 });
+        lastX = static_cast<int>(rows.back().start);
 
-        for (int y = area.height() - 1; const auto& row : std::ranges::reverse_view{ rows }) {
-            coords.push_back(Point{ .x = static_cast<int>(row.start), .y = y });
+        for (int y = area.top() + area.height() - 1; const auto& row : std::ranges::reverse_view{ rows }) {
+            int x = static_cast<int>(row.start);
+            if (x > lastX) {
+                coords.push_back(Point{ .x = x, .y = y + 1 });
+            } else if (x < lastX) {
+                coords.push_back(Point{ .x = lastX, .y = y });
+            }
+            coords.push_back(Point{ .x = x, .y = y });
+            lastX = x;
             y--;
         }
+
+        coords = optimizeLines(coords);
 
         sink.push_back(encodeMultiLine(coords));
 
@@ -238,7 +242,9 @@ void convertAreas(const std::vector<PixelArea>& areas, std::vector<SCICommand>& 
     }
 }
 
-void SCIPicVectorizer::scan() {
+std::vector<SCICommand> SCIPicVectorizer::scan() {
+    _areas.clear();
+
     std::vector<PixelRunList> scannedRows;
 
     for (int y = 0; y < _bmp.height(); y++) {
@@ -247,12 +253,12 @@ void SCIPicVectorizer::scan() {
         scannedRows.push_back(runs);
     }
 
-    auto areas = buildAreas(scannedRows);
-    printf("Scanner found %zu areas\n", areas.size());
+    _areas = buildAreas(scannedRows);
+    printf("Scanner found %zu areas\n", _areas.size());
 
     int totalPixels = 0;
 
-    for (const auto& area : areas) {
+    for (const auto& area : _areas) {
         const auto rows = area.rows();
         for (const auto& row : rows) {
             totalPixels += row.length;
@@ -261,7 +267,16 @@ void SCIPicVectorizer::scan() {
     assert(totalPixels == _bmp.height() * _bmp.width());
 
     std::vector<SCICommand> commands;
-    convertAreas(areas, commands);
+
+    std::vector<uint8_t> params{ SCIExtendedCommandCode::setPaletteEntries };
+    for (int i = 0; const auto& color : _colors.colors()) {
+        params.push_back(i++);
+        auto colorValue = color.first << 4 | color.second;
+        params.push_back(colorValue);
+    }
+    commands.push_back(SCICommand{ .code = SCICommandCode::extendedCommand, .params = params });
+
+    convertAreas(_areas, commands);
     printf("Produced %zu commands\n", commands.size());
 
     int totalBytes = 0;
@@ -269,4 +284,21 @@ void SCIPicVectorizer::scan() {
         totalBytes += command.params.size() + 1;
     }
     printf("Size: %d bytes\n", totalBytes);
+
+    return commands;
+}
+
+const PixelArea* SCIPicVectorizer::areaAt(int x, int y) const {
+    for (const auto& area : _areas) {
+        if (y < area.top() || y >= area.top() + area.height()) {
+            continue;
+        }
+        for (int dy = 0; const auto& row : area.rows()) {
+            if (y == area.top() + dy && x >= row.start && x < row.start + row.length) {
+                return &area;
+            }
+            dy++;
+        }
+    }
+    return nullptr;
 }

@@ -21,8 +21,9 @@ struct Palette {
     Palette(std::vector<const PaletteColor> colors);
     PaletteColor operator[](size_t index) const;
     size_t size() const;
-    size_t index(const PaletteColor& color) const;
-    size_t match(int x, int y, uint8_t egaColor) const;
+    int index(const PaletteColor& color) const;
+    int match(int x, int y, uint8_t egaColor) const;
+    std::span<const PaletteColor> colors() const;
 
    private:
     const std::vector<const PaletteColor> _colors;

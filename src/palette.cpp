@@ -40,13 +40,23 @@ Palette buildPalette(const EGAImage& bmp) {
         for (int y = 0; y < bmp.height(); y++) {
             const auto a = bmp.get(x, y);
             const auto b = bmp.get(x + 1, y);
-            if (((x + y) % 2) != 0) {
-                colorCount[std::make_pair(a, b)]++;
-                colors.insert(std::make_pair(a, b));
-            } else {
-                colorCount[std::make_pair(b, a)]++;
-                colors.insert(std::make_pair(b, a));
+
+            auto color = std::make_pair(a, a);
+
+            if (a != b && x < bmp.width() - 2) {
+                const auto c = bmp.get(x + 2, y);
+                // A pattern must be at least three pixels long
+                if (c == a) {
+                    if (((x + y) % 2) != 0) {
+                        color = std::make_pair(a, b);
+                    } else {
+                        color = std::make_pair(b, a);
+                    }
+                }
             }
+
+            colorCount[color]++;
+            colors.insert(color);
         }
     }
 
@@ -95,14 +105,14 @@ size_t Palette::size() const {
     return _colors.size();
 }
 
-size_t Palette::index(const PaletteColor& color) const {
+int Palette::index(const PaletteColor& color) const {
     if (_indexMap.contains(color)) {
         return _indexMap.at(color);
     }
     return -1;
 }
 
-size_t Palette::match(int x, int y, uint8_t egaColor) const {
+int Palette::match(int x, int y, uint8_t egaColor) const {
     for (int i = 0; i < _colors.size(); i++) {
         auto c = _colors.at(i);
         if (effectiveColor(c, x, y) == egaColor) {
@@ -110,6 +120,10 @@ size_t Palette::match(int x, int y, uint8_t egaColor) const {
         }
     }
     return -1;
+}
+
+std::span<const PaletteColor> Palette::colors() const {
+    return _colors;
 }
 
 uint8_t effectiveColor(const PaletteColor& col, int x, int y) {

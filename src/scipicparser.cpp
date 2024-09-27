@@ -1,4 +1,4 @@
-#include "scipic.hpp"
+#include "scipicparser.hpp"
 #include <sstream>
 
 // http://sci.sierrahelp.com/Documentation/SCISpecifications/16-SCI0-SCI01PICResource.html
@@ -435,10 +435,12 @@ void SCIPicParser::parseExtended(uint8_t cmd) {
             while (_pos <= _data.size() && !nextIsCommand()) {
                 const uint8_t i = read();
                 const uint8_t color = read();
-                for (auto& palette : _palettes) {
-                    palette[i].first = (color & 0xf0) >> 4;
-                    palette[i].second = color & 0xf;
-                }
+
+                const uint8_t palette = std::clamp(i / 40, 0, 3);
+                const uint8_t paletteIndex = i % 40;
+                auto& paletteEntry = _palettes[palette][paletteIndex];
+                paletteEntry.first = (color & 0xf0) >> 4;
+                paletteEntry.second = color & 0xf;
             }
         } break;
 
