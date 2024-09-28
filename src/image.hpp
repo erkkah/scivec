@@ -53,3 +53,28 @@ struct EGAImage {
     int _height{ 0 };
     std::vector<uint8_t> _bitmap;
 };
+
+struct SCIImage {
+    SCIImage(int width, int height) : _width{ width }, _height{ height }, _bitmap(width * height){};
+
+    int width() const {
+        return _width;
+    }
+
+    int height() const {
+        return _height;
+    }
+
+    uint8_t get(int x, int y) const {
+        return _bitmap[y * _width + x];
+    }
+
+    void put(int x, int y, uint8_t p) {
+        _bitmap[y * _width + x] = p;
+    }
+
+   private:
+    int _width{ 0 };
+    int _height{ 0 };
+    std::vector<uint8_t> _bitmap;
+};

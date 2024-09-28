@@ -4,9 +4,12 @@
 #include <ranges>
 #include <set>
 
-using PixelRunList = std::vector<PixelRun>;
+/*
+ * Härnäst: För varje pixel, kolla några pixlar i alla väderstreck vilka palettfärger
+ * det skulle bli, välj den vanligaste.
+ */
 
-PixelRunList pixelRuns(int y, std::span<const uint8_t> rowData, const Palette& palette) {
+PixelRunList SCIPicVectorizer::pixelRuns(int y, std::span<const uint8_t> rowData) {
     assert(rowData.size() > 1);
 
     PixelRunList result;
@@ -15,6 +18,7 @@ PixelRunList pixelRuns(int y, std::span<const uint8_t> rowData, const Palette& p
     size_t runStart = 0;
 
     for (int x = 0; x < rowData.size() - 1; x++) {
+        auto currentPixel = rowData[x];
         auto first = rowData[x];
         auto second = rowData[x + 1];
         // return ((x + y) % 2) ? col.first : col.second;
@@ -23,19 +27,33 @@ PixelRunList pixelRuns(int y, std::span<const uint8_t> rowData, const Palette& p
         }
         PaletteColor c(first, second);
 
-        auto currentColor = palette.index(c);
+        auto currentColor = _colors.index(c);
         int skip = 0;
 
         if (currentColor != -1) {
-            // A full two-pixel match, so skip a pixel!
-            skip = 1;
+            if (previousColor != -1 && currentColor != previousColor) {
+                if (effectiveColor(_colors[previousColor], x, y) == currentPixel) {
+                    currentColor = previousColor;
+                } else if (y > 0 && effectiveColor(_colors[_sciImage.get(x, y - 1)], x, y) == currentPixel) {
+                    currentColor = _sciImage.get(x, y - 1);
+                } else {
+                    skip = 1;
+                }
+            } else {
+                // A full two-pixel match, so skip a pixel!
+                skip = 1;
+            }
+        } else if (previousColor != -1 && effectiveColor(_colors[previousColor], x, y) == currentPixel) {
+            currentColor = previousColor;
         } else {
-            currentColor = palette.match(x, y, rowData[x]);
+            currentColor = _colors.match(x, y, currentPixel);
         }
 
         if (currentColor == -1) {
             throw std::runtime_error("Unhandled color case");
         }
+
+        _sciImage.put(x, y, currentColor);
 
         if (currentColor != previousColor && previousColor != -1) {
             result.emplace_back(runStart, x - runStart, static_cast<uint8_t>(previousColor));
@@ -49,7 +67,7 @@ PixelRunList pixelRuns(int y, std::span<const uint8_t> rowData, const Palette& p
     if (runStart < rowData.size()) {
         const auto lastX = rowData.size() - 1;
         const auto lastPixel = rowData.back();
-        const auto lastColor = palette.match(lastX, y, lastPixel);
+        const auto lastColor = _colors.match(lastX, y, lastPixel);
 
         if (lastColor != previousColor) {
             result.emplace_back(runStart, lastX - runStart, static_cast<uint8_t>(previousColor));
@@ -249,7 +267,7 @@ std::vector<SCICommand> SCIPicVectorizer::scan() {
 
     for (int y = 0; y < _bmp.height(); y++) {
         auto row = _bmp.row(y);
-        const auto runs = pixelRuns(y, row, _colors);
+        const auto runs = pixelRuns(y, row);
         scannedRows.push_back(runs);
     }
 

@@ -41,7 +41,7 @@ struct PixelArea {
         if (_rows.empty()) {
             return false;
         }
-        return _rows.back().overlaps(run);
+        return _rows.back().overlaps(run) || run.overlaps(_rows.back());
     }
 
     void add(const PixelRun& run) {
@@ -62,8 +62,11 @@ struct PixelArea {
     std::vector<PixelRun> _rows;
 };
 
+using PixelRunList = std::vector<PixelRun>;
+
 struct SCIPicVectorizer {
-    SCIPicVectorizer(const EGAImage& bmp) : _bmp(bmp), _colors(buildPalette(bmp)) {
+    SCIPicVectorizer(const EGAImage& bmp)
+        : _bmp(bmp), _colors(buildPalette(bmp)), _sciImage(bmp.width(), bmp.height()) {
         printf("Found %zu distinct palette colors\n", _colors.size());
     }
 
@@ -71,7 +74,10 @@ struct SCIPicVectorizer {
     const PixelArea* areaAt(int x, int y) const;
 
    private:
+    PixelRunList pixelRuns(int y, std::span<const uint8_t> rowData);
+
     const EGAImage& _bmp;
     const Palette _colors;
+    SCIImage _sciImage;
     std::vector<PixelArea> _areas;
 };
