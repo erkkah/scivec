@@ -74,7 +74,8 @@ struct SCIPicVectorizer {
     const PixelArea* areaAt(int x, int y) const;
 
    private:
-    PixelRunList pixelRuns(int y, std::span<const uint8_t> rowData);
+    int pickColor(int x, int y, int previousColor, std::span<int> previousRow) const;
+    PixelRunList pixelRuns(int y, std::span<int> previousRow);
 
     const EGAImage& _bmp;
     const Palette _colors;

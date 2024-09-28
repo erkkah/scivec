@@ -3,14 +3,71 @@
 #include <span>
 #include <ranges>
 #include <set>
+#include <map>
+#include <vector>
 
-/*
- * Härnäst: För varje pixel, kolla några pixlar i alla väderstreck vilka palettfärger
- * det skulle bli, välj den vanligaste.
- */
+int SCIPicVectorizer::pickColor(int x, int y, int leftColor, std::span<int> previousRow) const {
+    const auto colorAt = [this](int x, int y, int dx, int dy) {
+        assert(abs(dx) == 1 || abs(dy) == 1);
+        assert(x + dx >= 0);
+        assert(y + dy >= 0);
 
-PixelRunList SCIPicVectorizer::pixelRuns(int y, std::span<const uint8_t> rowData) {
-    assert(rowData.size() > 1);
+        auto first = _bmp.get(x, y);
+        auto second = _bmp.get(x + dx, y + dy);
+
+        if ((x + y) % 2 == 0) {
+            std::swap(first, second);
+        }
+
+        const auto c = PaletteColor(first, second);
+        const auto colorIndex = _colors.index(c);
+        if (colorIndex != -1) {
+            return colorIndex;
+        }
+        return _colors.match(x, y, _bmp.get(x, y));
+    };
+
+    if (leftColor != -1 && effectiveColor(_colors[leftColor], x, y) == _bmp.get(x, y)) {
+        return leftColor;
+    }
+
+    auto upperColor = previousRow[x];
+    if (upperColor != -1 && effectiveColor(_colors[upperColor], x, y) == _bmp.get(x, y)) {
+        return upperColor;
+    }
+
+    std::vector<std::array<int, 2>> deltas{ { 1, 0 }, { 0, 1 } };
+    if (x > 0) {
+        deltas.push_back({ -1, 0 });
+    }
+    if (y > 0) {
+        deltas.push_back({ 0, -1 });
+    }
+
+    std::map<int, int> counts;
+
+    for (const auto& delta : deltas) {
+        const auto c = colorAt(x, y, delta[0], delta[1]);
+        if (c != -1) {
+            counts[c]++;
+        }
+    }
+
+    int maxCount = -1;
+    int maxColor = -1;
+
+    for (const auto& count : counts) {
+        if (count.second > maxCount) {
+            maxCount = count.second;
+            maxColor = count.first;
+        }
+    }
+
+    return maxColor;
+}
+
+PixelRunList SCIPicVectorizer::pixelRuns(int y, std::span<int> previousRow) {
+    auto rowData = _bmp.row(y);
 
     PixelRunList result;
 
@@ -18,49 +75,18 @@ PixelRunList SCIPicVectorizer::pixelRuns(int y, std::span<const uint8_t> rowData
     size_t runStart = 0;
 
     for (int x = 0; x < rowData.size() - 1; x++) {
-        auto currentPixel = rowData[x];
-        auto first = rowData[x];
-        auto second = rowData[x + 1];
-        // return ((x + y) % 2) ? col.first : col.second;
-        if ((x + y) % 2 == 0) {
-            std::swap(first, second);
-        }
-        PaletteColor c(first, second);
-
-        auto currentColor = _colors.index(c);
-        int skip = 0;
-
-        if (currentColor != -1) {
-            if (previousColor != -1 && currentColor != previousColor) {
-                if (effectiveColor(_colors[previousColor], x, y) == currentPixel) {
-                    currentColor = previousColor;
-                } else if (y > 0 && effectiveColor(_colors[_sciImage.get(x, y - 1)], x, y) == currentPixel) {
-                    currentColor = _sciImage.get(x, y - 1);
-                } else {
-                    skip = 1;
-                }
-            } else {
-                // A full two-pixel match, so skip a pixel!
-                skip = 1;
-            }
-        } else if (previousColor != -1 && effectiveColor(_colors[previousColor], x, y) == currentPixel) {
-            currentColor = previousColor;
-        } else {
-            currentColor = _colors.match(x, y, currentPixel);
-        }
+        const auto currentColor = pickColor(x, y, previousColor, previousRow);
+        previousRow[x] = currentColor;
 
         if (currentColor == -1) {
             throw std::runtime_error("Unhandled color case");
         }
-
-        _sciImage.put(x, y, currentColor);
 
         if (currentColor != previousColor && previousColor != -1) {
             result.emplace_back(runStart, x - runStart, static_cast<uint8_t>(previousColor));
             runStart = x;
         }
 
-        x += skip;
         previousColor = currentColor;
     }
 
@@ -265,9 +291,10 @@ std::vector<SCICommand> SCIPicVectorizer::scan() {
 
     std::vector<PixelRunList> scannedRows;
 
+    std::vector<int> rowMemory(_bmp.width(), -1);
+
     for (int y = 0; y < _bmp.height(); y++) {
-        auto row = _bmp.row(y);
-        const auto runs = pixelRuns(y, row);
+        const auto runs = pixelRuns(y, rowMemory);
         scannedRows.push_back(runs);
     }
 

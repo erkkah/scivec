@@ -78,10 +78,10 @@ int main(int argc, const char** argv) {
 
     show(bmp.get(), parser.bitmap(), [&vec, &counter](int x, int y, Tigr* scr) {
         // printf("(%d:%d)\n", x, y);
-        counter += tigrTime() * 4;
-        int shade = 10 * (static_cast<int>(counter) % 2);
+        counter += tigrTime() * 3;
+        int shade = 50 * (static_cast<int>(counter) % 2);
         const auto* area = vec.areaAt(x, y);
-        const auto marker = tigrRGBA(100, shade, shade, 180 + shade);
+        const auto marker = tigrRGBA(200, 100 + shade, 100 + shade, 180);
         if (area != nullptr) {
             for (int dy = 0; const auto& row : area->rows()) {
                 const auto y = area->top() + dy;
