@@ -34,6 +34,30 @@ enum SCIExtendedCommandCode {
     setPriorityBands = 8,
 };
 
+struct Point {
+    Point() = default;
+    Point(const Point& other) = default;
+    Point& operator=(const Point& other) = default;
+
+    Point(int x, int y) : x(x), y(y) {
+    }
+
+    Point(int x, int y, int color) : x(x), y(y), color(color) {
+    }
+
+    bool operator==(const Point& other) const {
+        return x == other.x && y == other.y && color == other.color;
+    }
+
+    bool empty() const {
+        return x == -1 && y == -1 && color == -1;
+    }
+
+    int x{ -1 };
+    int y{ -1 };
+    int color{ -1 };
+};
+
 struct SCICommand {
     SCICommandCode code;
     std::vector<uint8_t> params;

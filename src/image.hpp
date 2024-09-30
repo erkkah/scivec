@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 #include <span>
+#include <cassert>
 #include "stb_image.h"
 #include "tigr.h"
 
@@ -54,8 +55,8 @@ struct EGAImage {
     std::vector<uint8_t> _bitmap;
 };
 
-struct SCIImage {
-    SCIImage(int width, int height) : _width{ width }, _height{ height }, _bitmap(width * height){};
+struct PaletteImage {
+    PaletteImage(int width, int height) : _width{ width }, _height{ height }, _bitmap(width * height){};
 
     int width() const {
         return _width;
@@ -66,15 +67,28 @@ struct SCIImage {
     }
 
     uint8_t get(int x, int y) const {
-        return _bitmap[y * _width + x];
+        const auto index = y * _width + x;
+        assert(index < _bitmap.size());
+        return _bitmap[index];
     }
 
     void put(int x, int y, uint8_t p) {
-        _bitmap[y * _width + x] = p;
+        const auto index = y * _width + x;
+        assert(index < _bitmap.size());
+        _bitmap[index] = p;
+    }
+
+    std::span<const uint8_t> row(int y) const {
+        assert(y < _height);
+        return std::span(_bitmap.data() + _width * y, _width);
+    }
+
+    void clear(uint8_t color) {
+        std::fill(_bitmap.begin(), _bitmap.end(), color);
     }
 
    private:
-    int _width{ 0 };
-    int _height{ 0 };
+    int _width;
+    int _height;
     std::vector<uint8_t> _bitmap;
 };

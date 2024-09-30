@@ -83,9 +83,9 @@ int main(int argc, const char** argv) {
         const auto* area = vec.areaAt(x, y);
         const auto marker = tigrRGBA(200, 100 + shade, 100 + shade, 180);
         if (area != nullptr) {
-            for (int dy = 0; const auto& row : area->rows()) {
+            for (int dy = 0; const auto& run : area->runs()) {
                 const auto y = area->top() + dy;
-                tigrLine(scr, row.start, y, row.start + row.length, y, marker);
+                tigrLine(scr, run->start, y, run->start + run->length, y, marker);
                 dy++;
             }
         }

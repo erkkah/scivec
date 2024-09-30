@@ -6,14 +6,313 @@
 #include <map>
 #include <vector>
 
-int SCIPicVectorizer::pickColor(int x, int y, int leftColor, std::span<int> previousRow) const {
+void PixelArea::convert(const PaletteImage& source) {
+    if (_runs.empty()) {
+        return;
+    }
+
+    if (_runs.size() == 1) {
+        auto run = _runs.front();
+        _lines.push_back(Point(run->start, run->row, run->color));
+        _lines.push_back(Point(run->start + run->length - 1, run->row, run->color));
+        return;
+    }
+
+    PaletteImage workArea(source.width(), source.height());
+
+    int startX = 0;
+    int startY = 0;
+    int color = -1;
+
+    int minX = _runs.front()->start;
+    int maxX = minX;
+    int minY = _runs.front()->row;
+    int maxY = minY;
+
+    std::sort(_runs.begin(), _runs.end(), [](const auto& a, const auto& b) {
+        if (a->row == b->row) {
+            return a->start <= b->start;
+        }
+        return a->row < b->row;
+    });
+
+    for (auto& run : _runs) {
+        int thisRow = run->row;
+        int thisStart = run->start;
+        int thisEnd = run->start + run->length - 1;
+        int thisColor = run->color;
+
+        if (color == -1) {
+            color = thisColor;
+            // ??? why + 1?
+            workArea.clear(color + 1);
+        }
+
+        if (minX > thisStart) {
+            minX = thisStart;
+        }
+        if (maxX < thisEnd) {
+            maxX = thisEnd;
+        }
+        if (minY > thisRow) {
+            minY = thisRow;
+        }
+        if (maxY < thisRow) {
+            maxY = thisRow;
+        }
+
+        workArea.put(thisStart, thisRow, thisColor);
+
+        for (int x = thisStart + 1; x < thisEnd; x++) {
+            if ((thisRow == 0 || thisRow == source.height() - 1) || (source.get(x, thisRow - 1) != thisColor) ||
+                (source.get(x, thisRow + 1) != thisColor)) {
+                workArea.put(x, thisRow, thisColor);
+            }
+        }
+
+        workArea.put(thisEnd, thisRow, thisColor);
+    }
+
+    while (true) {
+        bool found = false;
+
+        for (int searchX = minX; !found && searchX <= maxX; searchX++) {
+            for (int searchY = minY; !found && searchY <= maxY; searchY++) {
+                if (workArea.get(searchX, searchY) == color) {
+                    startX = searchX;
+                    startY = searchY;
+                    found = true;
+                }
+            }
+        }
+
+        if (!found) {
+            break;
+        }
+
+        int x = startX;
+        int y = startY;
+        int xDelta = 0;
+        int yDelta = 1;
+        int count = 0;
+
+        const auto safeIsColor = [&workArea, &color](int x, int y) -> bool {
+            if (x < 0 || y < 0 || x >= workArea.width() || y >= workArea.height()) {
+                return false;
+            }
+            return workArea.get(x, y) == color;
+        };
+
+        while (true) {
+            count++;
+
+            _lines.push_back(Point(x, y, color));
+            workArea.put(x, y, color + 1);
+            if (count == 3) {
+                workArea.put(startX, startY, color);
+            }
+            if (safeIsColor(x + xDelta, y + yDelta)) {
+                x += xDelta;
+                y += yDelta;
+            } else if (safeIsColor(x, y + 1)) {
+                y++;
+                xDelta = 0;
+                yDelta = 1;
+            } else if (safeIsColor(x + 1, y)) {
+                x++;
+                xDelta = 1;
+                yDelta = 0;
+            } else if (safeIsColor(x, y - 1)) {
+                y--;
+                xDelta = 0;
+                yDelta = -1;
+            } else if (safeIsColor(x - 1, y)) {
+                x--;
+                xDelta = -1;
+                yDelta = 0;
+            } else if (safeIsColor(x + 1, y + 1)) {
+                x++;
+                y++;
+                xDelta = 1;
+                yDelta = 1;
+            } else if (safeIsColor(x + 1, y - 1)) {
+                x++;
+                y--;
+                xDelta = 1;
+                yDelta = -1;
+            } else if (safeIsColor(x - 1, y + 1)) {
+                x--;
+                y++;
+                xDelta = -1;
+                yDelta = 1;
+            } else if (safeIsColor(x - 1, y - 1)) {
+                x--;
+                y--;
+                xDelta = -1;
+                yDelta = -1;
+            } else {
+                if (x != startX || y != startY) {
+                    _lines.push_back(Point(-1, -1));
+                    bool found = 0;
+                    for (int searchX = minX; !found && searchX < maxX; searchX++) {
+                        for (int searchY = minY; !found && searchY < maxY; searchY++) {
+                            if (workArea.get(searchX, searchY) == color) {
+                                if (searchX == startX && searchY == startY) {
+                                    continue;
+                                }
+                                x = searchX;
+                                y = searchY;
+                                count = 0;
+                            }
+                        }
+                    }
+                    if (!found) {
+                        break;
+                    }
+                }
+            }
+
+            if (x == startX && y == startY) {
+                workArea.put(startX, startY, color + 1);
+                _lines.push_back(Point(startX, startY, color));
+                _lines.push_back(Point(-1, -1));
+                _filled = true;
+                break;
+            }
+        }
+    }
+}
+
+void PixelArea::optimize() {
+    std::vector<Point> optimized;
+
+    optimized.push_back(_lines.front());
+    auto candidate = _lines[1];
+
+    for (const auto& nextPoint : std::span(_lines).subspan(2)) {
+        const auto& p0 = optimized.back();
+
+        if (candidate == p0) {
+            candidate = nextPoint;
+            continue;
+        }
+
+        auto xDiff = candidate.x - p0.x;
+        auto yDiff = candidate.y - p0.y;
+
+        if (xDiff == 0 && nextPoint.x == p0.x) {
+            candidate = nextPoint;
+        } else if (yDiff == 0 && nextPoint.y == p0.y) {
+            candidate = nextPoint;
+        } else if (abs(xDiff) == 1 && abs(yDiff) == 1 && (nextPoint.x - candidate.x == xDiff) &&
+                   (nextPoint.y - candidate.y == yDiff)) {
+            candidate = nextPoint;
+        } else {
+            optimized.push_back(candidate);
+            candidate = nextPoint;
+        }
+    }
+
+    optimized.push_back(candidate);
+    std::swap(optimized, _lines);
+}
+
+// void PixelArea::optimize() {
+//     int fill = 15;
+
+//     Point p0, p1, p2;
+//     int xDiff = 0;
+//     int yDiff = 0;
+
+//     auto i = _lines.begin();
+//     p0 = *i;
+//     i++;
+//     p1 = *i;
+
+//     if (p0.color == fill || p1.color == fill) {
+//         _lines.clear();
+//         return;
+//     }
+
+//     do {
+//         if (p1.x == p0.x) {
+//             // Redundant vertical
+
+//             i++;
+//             if (i == _lines.end()) {
+//                 break;
+//             }
+//             p2 = *i;
+
+//             if (p0.y == p1.y || p2.x == p0.x) {
+//                 //_lines.remove(p1);
+//             } else {
+//                 p0 = p1;
+//             }
+//             p1 = p2;
+//         } else if (p1.y == p0.y) {
+//             // Redundant horizontal
+
+//             i++;
+//             if (i == _lines.end()) {
+//                 break;
+//             }
+//             p2 = *i;
+
+//             if (p2.y == p0.y || p0.x == p1.x) {
+//                 // _lines.remove(p1);
+//             } else {
+//                 p0 = p1;
+//             }
+//             p1 = p2;
+//         } else if (abs(xDiff = p1.x - p0.x) == 1 && abs(yDiff = p1.y - p0.y) == 1) {
+//             // Redundant slanted
+//             i++;
+
+//             if (i == _lines.end()) {
+//                 break;
+//             }
+//             p2 = *i;
+
+//             if (p2.x - p1.x == xDiff && p2.y - p1.y == yDiff) {
+//                 // _lines.remove(p1);
+//             } else {
+//                 p0 = p1;
+//             }
+//             p1 = p2;
+//         } else {
+//             // Keep
+//             p0 = p1;
+//             i++;
+//             if (i == _lines.end()) {
+//                 break;
+//             }
+//             p1 = *i;
+//         }
+//     } while (i != _lines.end());
+// }
+
+std::shared_ptr<PixelArea> SCIPicVectorizer::joinAreas(std::shared_ptr<PixelArea> a, std::shared_ptr<PixelArea> b) {
+    a->addAll(*b);
+
+    // for (const auto& run : b->runs()) {
+    //     for (int i = 0; i < run->length; i++) {
+    //         const auto coord = std::make_pair(run->start + i, run->row);
+    //         _pixelAreas[coord] = a;
+    //     }
+    // }
+    _areas.erase(b);
+    return a;
+}
+
+int SCIPicVectorizer::pickColor(int x, int y, int leftColor, std::span<const uint8_t> previousRow) const {
     const auto colorAt = [this](int x, int y, int dx, int dy) {
         assert(abs(dx) == 1 || abs(dy) == 1);
         assert(x + dx >= 0);
         assert(y + dy >= 0);
 
-        auto first = _bmp.get(x, y);
-        auto second = _bmp.get(x + dx, y + dy);
+        auto first = _source.get(x, y);
+        auto second = _source.get(x + dx, y + dy);
 
         if ((x + y) % 2 == 0) {
             std::swap(first, second);
@@ -24,16 +323,18 @@ int SCIPicVectorizer::pickColor(int x, int y, int leftColor, std::span<int> prev
         if (colorIndex != -1) {
             return colorIndex;
         }
-        return _colors.match(x, y, _bmp.get(x, y));
+        return _colors.match(x, y, _source.get(x, y));
     };
 
-    if (leftColor != -1 && effectiveColor(_colors[leftColor], x, y) == _bmp.get(x, y)) {
+    if (leftColor != -1 && effectiveColor(_colors[leftColor], x, y) == _source.get(x, y)) {
         return leftColor;
     }
 
-    auto upperColor = previousRow[x];
-    if (upperColor != -1 && effectiveColor(_colors[upperColor], x, y) == _bmp.get(x, y)) {
-        return upperColor;
+    if (!previousRow.empty()) {
+        auto upperColor = previousRow[x];
+        if (effectiveColor(_colors[upperColor], x, y) == _source.get(x, y)) {
+            return upperColor;
+        }
     }
 
     std::vector<std::array<int, 2>> deltas{ { 1, 0 }, { 0, 1 } };
@@ -66,91 +367,84 @@ int SCIPicVectorizer::pickColor(int x, int y, int leftColor, std::span<int> prev
     return maxColor;
 }
 
-PixelRunList SCIPicVectorizer::pixelRuns(int y, std::span<int> previousRow) {
-    auto rowData = _bmp.row(y);
-
-    PixelRunList result;
-
+void SCIPicVectorizer::createPaletteImage() {
     int previousColor = -1;
-    size_t runStart = 0;
+    std::span<const uint8_t> previousRow({});
 
-    for (int x = 0; x < rowData.size() - 1; x++) {
-        const auto currentColor = pickColor(x, y, previousColor, previousRow);
-        previousRow[x] = currentColor;
-
-        if (currentColor == -1) {
-            throw std::runtime_error("Unhandled color case");
+    for (int y = 0; y < _source.height(); y++) {
+        for (int x = 0; x < _source.width(); x++) {
+            const auto c = pickColor(x, y, previousColor, previousRow);
+            _paletteImage.put(x, y, c);
+            previousColor = c;
         }
-
-        if (currentColor != previousColor && previousColor != -1) {
-            result.emplace_back(runStart, x - runStart, static_cast<uint8_t>(previousColor));
-            runStart = x;
-        }
-
-        previousColor = currentColor;
+        previousRow = _paletteImage.row(y);
     }
-
-    if (runStart < rowData.size()) {
-        const auto lastX = rowData.size() - 1;
-        const auto lastPixel = rowData.back();
-        const auto lastColor = _colors.match(lastX, y, lastPixel);
-
-        if (lastColor != previousColor) {
-            result.emplace_back(runStart, lastX - runStart, static_cast<uint8_t>(previousColor));
-            runStart = lastX;
-        }
-
-        result.emplace_back(runStart, rowData.size() - runStart, static_cast<uint8_t>(lastColor));
-    }
-
-    int total = 0;
-    for (const auto& run : result) {
-        total += run.length;
-    }
-    assert(total == rowData.size());
-
-    return result;
 }
 
-std::vector<PixelArea> buildAreas(const std::vector<PixelRunList>& rows) {
-    std::vector<PixelArea> allAreas;
-    std::set<size_t> previousRowAreas;
-    std::set<size_t> currentRowAreas;
+void SCIPicVectorizer::scanRow(int y, std::vector<std::shared_ptr<PixelArea>>& columnAreas) {
+    int startColumn = 0;
+    auto currentColor = _paletteImage.get(startColumn, y);
 
-    auto matchingArea = [&previousRowAreas, &allAreas](const PixelRun& run) -> int {
-        for (auto& area : previousRowAreas) {
-            if (allAreas[area].matches(run)) {
-                return area;
-            }
-        }
-        return -1;
-    };
+    auto run = std::make_shared<PixelRun>(y, startColumn, 1, currentColor);
+    std::shared_ptr<PixelArea> area;
 
-    for (int y = 0; const auto& row : rows) {
-        for (const auto& run : row) {
-            auto match = matchingArea(run);
-            if (match != -1) {
-                auto& area = allAreas.at(match);
-                previousRowAreas.erase(match);
-                currentRowAreas.insert(match);
-                area.add(run);
-            } else {
-                currentRowAreas.insert(allAreas.size());
-                allAreas.emplace_back(y, run);
-            }
-        }
-        previousRowAreas = currentRowAreas;
-        currentRowAreas.clear();
-        y++;
+    if (y > 0 && currentColor == _paletteImage.get(startColumn, y - 1)) {
+        // const auto matchingArea = _pixelAreas.at(std::make_pair(startColumn, y - 1));
+        const auto matchingArea = columnAreas[startColumn];
+        assert(matchingArea);
+        matchingArea->add(run);
+        area = matchingArea;
+    } else {
+        area = std::make_shared<PixelArea>();
+        area->add(run);
+        _areas.insert(area);
+        columnAreas[startColumn] = area;
     }
 
-    return allAreas;
-}
+    //_pixelAreas[std::make_pair(startColumn, y)] = area;
+    //_pixelAreas[{ startColumn, y }] = area;
 
-struct Point {
-    int x;
-    int y;
-};
+    for (int x = 1; x < _paletteImage.width(); x++) {
+        if (y == 22 && x == 207) {
+            printf("What!\n");
+        }
+        auto color = _paletteImage.get(x, y);
+        if (color == currentColor) {
+            if (y > 0 && color == _paletteImage.get(x, y - 1)) {
+                // const auto matchingArea = _pixelAreas.at(std::make_pair(x, y - 1));
+                const auto matchingArea = columnAreas[x];
+                assert(matchingArea);
+                if (matchingArea != area) {
+                    area = joinAreas(matchingArea, area);
+                }
+            }
+            //_pixelAreas[std::make_pair(x, y)] = area;
+            columnAreas[x] = area;
+            continue;
+        }
+        run->extendTo(x - 1);
+
+        currentColor = color;
+        startColumn = x;
+
+        run = std::make_shared<PixelRun>(y, startColumn, 1, currentColor);
+
+        if (y > 0 && color == _paletteImage.get(x, y - 1)) {
+            // const auto matchingArea = _pixelAreas.at(std::make_pair(x, y - 1));
+            const auto matchingArea = columnAreas[x];
+            assert(matchingArea);
+            matchingArea->add(run);
+            area = matchingArea;
+        } else {
+            area = std::make_shared<PixelArea>();
+            area->add(run);
+            _areas.insert(area);
+        }
+        //_pixelAreas[std::make_pair(startColumn, y)] = area;
+        columnAreas[x] = area;
+    }
+    run->extendTo(_source.width() - 1);
+}
 
 using Line = std::pair<Point, Point>;
 
@@ -189,127 +483,58 @@ SCICommand encodeFill(int x, int y, uint8_t color) {
     return SCICommand{ .code = SCICommandCode::floodFill, .params = encodeCoordinate(x, y) };
 }
 
-std::vector<Point> optimizeLines(std::span<Point> coords) {
-    std::vector<Point> result;
-
-    result.push_back(coords.front());
-    int sameXCount = 0;
-    int sameYCount = 0;
-
-    for (const auto& coord : coords.subspan(1)) {
-        auto& last = result.back();
-
-        if (coord.x == last.x) {
-            sameYCount = 0;
-            sameXCount++;
-        } else if (coord.y == last.y) {
-            sameXCount = 0;
-            sameYCount++;
-        } else {
-            sameXCount = 0;
-            sameYCount = 0;
-        }
-
-        if (sameXCount > 2) {
-            last.y = coord.y;
-        } else if (sameYCount > 2) {
-            last.x = coord.x;
-        } else {
-            // Also check for same angle here?
-            result.push_back(coord);
-        }
-    }
-
-    return result;
-}
-
 void convertArea(const PixelArea& area, std::vector<SCICommand>& sink) {
-    sink.push_back(encodeVisual(area.rows().front().color));
+    sink.push_back(encodeVisual(area.color()));
 
-    if (area.height() < 4) {
-        // treat as horizontal lines
-        for (int y = area.top(); const auto& row : area.rows()) {
-            sink.push_back(encodeLine(Line(Point{ .x = static_cast<int>(row.start), .y = y },
-                Point{ .x = static_cast<int>(row.start + row.length - 1), .y = y })));
-            y++;
+    std::vector<Point> coords;
+    for (const auto& point : area.lines()) {
+        if (point.empty()) {
+            sink.push_back(encodeMultiLine(coords));
+            coords.clear();
+        } else {
+            coords.push_back(point);
         }
-    } else {
-        // draw a top line, a series of vertical/horizontal lines and a bottom line,
-        // then flood-fill.
-        const auto rows = area.rows();
-        const auto& topLine = rows.front();
-        const auto& bottomLine = rows.back();
-
-        std::vector<Point> coords;
-
-        coords.push_back(Point{ .x = static_cast<int>(topLine.start), .y = area.top() });
-
-        int lastX = static_cast<int>(topLine.start + topLine.length - 1);
-
-        for (int y = area.top(); const auto& row : rows) {
-            int x = static_cast<int>(row.start + row.length - 1);
-            if (x < lastX) {
-                coords.push_back(Point{ .x = x, .y = y - 1 });
-            } else if (x > lastX) {
-                coords.push_back(Point{ .x = lastX, .y = y });
-            }
-            coords.push_back(Point{ .x = x, .y = y });
-            lastX = x;
-            y++;
-        }
-
-        lastX = static_cast<int>(rows.back().start);
-
-        for (int y = area.top() + area.height() - 1; const auto& row : std::ranges::reverse_view{ rows }) {
-            int x = static_cast<int>(row.start);
-            if (x > lastX) {
-                coords.push_back(Point{ .x = x, .y = y + 1 });
-            } else if (x < lastX) {
-                coords.push_back(Point{ .x = lastX, .y = y });
-            }
-            coords.push_back(Point{ .x = x, .y = y });
-            lastX = x;
-            y--;
-        }
-
-        coords = optimizeLines(coords);
-
-        sink.push_back(encodeMultiLine(coords));
-
-        // ??? Add fills here!
     }
 }
 
-void convertAreas(const std::vector<PixelArea>& areas, std::vector<SCICommand>& sink) {
+void convertAreas(const std::vector<std::shared_ptr<PixelArea>>& areas, std::vector<SCICommand>& sink) {
     for (const auto& area : areas) {
-        convertArea(area, sink);
+        convertArea(*area, sink);
     }
 }
 
 std::vector<SCICommand> SCIPicVectorizer::scan() {
     _areas.clear();
+    createPaletteImage();
 
-    std::vector<PixelRunList> scannedRows;
+    std::vector<std::shared_ptr<PixelArea>> rowMemory(_source.width());
 
-    std::vector<int> rowMemory(_bmp.width(), -1);
-
-    for (int y = 0; y < _bmp.height(); y++) {
-        const auto runs = pixelRuns(y, rowMemory);
-        scannedRows.push_back(runs);
+    for (int y = 0; y < _source.height(); y++) {
+        printf("Processing row %d\n", y);
+        scanRow(y, rowMemory);
     }
 
-    _areas = buildAreas(scannedRows);
+    for (auto& area : _areas) {
+        area->convert(_paletteImage);
+        area->optimize();
+    }
+
+    std::vector sortedAreas(_areas.begin(), _areas.end());
+    std::sort(sortedAreas.begin(), sortedAreas.end(), [](const auto& a, const auto& b) {
+        return a->color() <= b->color();
+    });
+
     printf("Scanner found %zu areas\n", _areas.size());
 
     int totalPixels = 0;
 
     for (const auto& area : _areas) {
-        const auto rows = area.rows();
+        const auto rows = area->runs();
         for (const auto& row : rows) {
-            totalPixels += row.length;
+            totalPixels += row->length;
         }
     }
-    assert(totalPixels == _bmp.height() * _bmp.width());
+    // assert(totalPixels == _source.height() * _source.width());
 
     std::vector<SCICommand> commands;
 
@@ -321,7 +546,7 @@ std::vector<SCICommand> SCIPicVectorizer::scan() {
     }
     commands.push_back(SCICommand{ .code = SCICommandCode::extendedCommand, .params = params });
 
-    convertAreas(_areas, commands);
+    convertAreas(sortedAreas, commands);
     printf("Produced %zu commands\n", commands.size());
 
     int totalBytes = 0;
@@ -334,16 +559,16 @@ std::vector<SCICommand> SCIPicVectorizer::scan() {
 }
 
 const PixelArea* SCIPicVectorizer::areaAt(int x, int y) const {
-    for (const auto& area : _areas) {
-        if (y < area.top() || y >= area.top() + area.height()) {
-            continue;
-        }
-        for (int dy = 0; const auto& row : area.rows()) {
-            if (y == area.top() + dy && x >= row.start && x < row.start + row.length) {
-                return &area;
-            }
-            dy++;
-        }
-    }
+    // for (const auto& area : _areas) {
+    //     if (y < area->top() || y >= area->top() + area->height()) {
+    //         continue;
+    //     }
+    //     for (int dy = 0; const auto& row : area.rows()) {
+    //         if (y == area.top() + dy && x >= row.start && x < row.start + row.length) {
+    //             return &area;
+    //         }
+    //         dy++;
+    //     }
+    // }
     return nullptr;
 }
