@@ -113,6 +113,10 @@ int Palette::index(const PaletteColor& color) const {
 }
 
 int Palette::match(int x, int y, uint8_t egaColor) const {
+    const int fullMatch = index({ egaColor, egaColor });
+    if (fullMatch != -1) {
+        return fullMatch;
+    }
     for (int i = 0; i < _colors.size(); i++) {
         auto c = _colors.at(i);
         if (effectiveColor(c, x, y) == egaColor) {

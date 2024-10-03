@@ -2,6 +2,7 @@
 #include <span>
 #include <memory>
 #include <vector>
+#include <list>
 #include <map>
 #include <set>
 #include <cassert>
@@ -27,54 +28,78 @@ struct PixelRun {
         length = column - start + 1;
     }
 
-    const int row;
-    const int start;
+    // void swap(PixelRun& other) {
+    //     std::swap(row, other.row);
+    //     std::swap(start, other.start);
+    //     std::swap(length, other.length);
+    //     std::swap(color, other.color);
+    // }
+
+    int row;
+    int start;
     int length;
-    const uint8_t color;
+    uint8_t color;
 };
 
+using PixelAreaID = std::pair<int, int>;
+
 struct PixelArea {
-    // PixelArea(int top, const PixelRun& run) : _top(top) {
-    //     _rows.push_back(run);
-    // }
+    PixelArea(const PixelRun& run) : _top{ run.row } {
+    }
+
+    PixelArea(int row, int start, uint8_t color) : _top{ row } {
+        _runs.push_back(PixelRun(row, start, 1, color));
+    }
 
     PixelArea() {
     }
 
-    // int height() const {
-    //     return _runs.size();
+    // void add(const PixelRun& run) {
+    //     _runs.push_back(run);
     // }
-
-    // bool matches(const PixelRun& run) {
-    //     if (_rows.empty()) {
-    //         return false;
-    //     }
-    //     return _rows.back().overlaps(run) || run.overlaps(_rows.back());
-    // }
-
-    void add(std::shared_ptr<PixelRun> run) {
-        assert(_runs.size() <= 1000);
-        assert(std::find(_runs.begin(), _runs.end(), run) == _runs.end());
-        _runs.push_back(run);
-    }
-
-    void addAll(const PixelArea& other) {
-        for (const auto& run : other._runs) {
-            assert(_runs.size() <= 1000);
-            assert(std::find(_runs.begin(), _runs.end(), run) == _runs.end());
-            _runs.push_back(run);
+    bool contains(int x, int y) const {
+        // Use a map?
+        for (const auto& run : _runs) {
+            if (run.row != y) {
+                continue;
+            }
+            if (run.start <= x && x < run.start + run.length) {
+                return true;
+            }
         }
+        return false;
     }
 
-    const uint8_t color() const {
+    void extendLastRunTo(int column) {
         assert(!_runs.empty());
-        return _runs.front()->color;
+        _runs.back().extendTo(column);
     }
 
-    void convert(const PaletteImage& source);
-    void optimize();
+    void merge(PixelArea& other) {
+        assert(color() == other.color());
+        _runs.splice(_runs.end(), other._runs);
+    }
 
-    const std::vector<std::shared_ptr<PixelRun>>& runs() const {
+    uint8_t color() const {
+        assert(!_runs.empty());
+        return _runs.front().color;
+    }
+
+    PixelAreaID id() const {
+        assert(!_runs.empty());
+        const auto& last = _runs.front();
+        return { last.row, last.start };
+    }
+
+    bool empty() const {
+        return _runs.empty();
+    }
+
+    void traceLines(const ByteImage& source);
+    void optimizeLines();
+    void findFills(ByteImage& workArea, uint8_t bg);
+
+    const std::list<PixelRun>& runs() const {
         return _runs;
     }
 
@@ -86,12 +111,16 @@ struct PixelArea {
         return _lines;
     }
 
+    std::span<const Point> fills() const {
+        return _fills;
+    }
+
    private:
     const int _top{ 0 };
-    std::vector<std::shared_ptr<PixelRun>> _runs;
+    std::list<PixelRun> _runs;
     std::vector<Point> _lines;
     std::vector<Point> _fills;
-    bool _filled{ false };
+    bool _closed{ false };
 };
 
 using PixelRunList = std::vector<PixelRun>;
@@ -106,15 +135,15 @@ struct SCIPicVectorizer {
     const PixelArea* areaAt(int x, int y) const;
 
    private:
-    std::shared_ptr<PixelArea> joinAreas(std::shared_ptr<PixelArea> a, std::shared_ptr<PixelArea> b);
+    // std::shared_ptr<PixelArea> joinAreas(std::shared_ptr<PixelArea> a, std::shared_ptr<PixelArea> b);
     int pickColor(int x, int y, int previousColor, std::span<const uint8_t> previousRow) const;
     void createPaletteImage();
-    void scanRow(int y, std::vector<std::shared_ptr<PixelArea>>& columnAreas);
+    void scanRow(int y, std::vector<PixelAreaID>& columnAreas);
 
     const EGAImage& _source;
     const Palette _colors;
-    PaletteImage _paletteImage;
+    ByteImage _paletteImage;
 
-    std::set<std::shared_ptr<PixelArea>> _areas;
+    std::map<PixelAreaID, PixelArea> _areas;
     // std::map<std::pair<int, int>, std::shared_ptr<PixelArea>> _pixelAreas;
 };

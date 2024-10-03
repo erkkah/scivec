@@ -26,12 +26,13 @@ std::vector<uint8_t> loadFile(const char* fileName) {
     return data;
 }
 
-void show(Tigr* orig, Tigr* sci, std::function<void(int x, int y, Tigr* screen)> inspect) {
+void show(Tigr* orig, Tigr* sci, std::function<void(int x, int y, bool tapped, Tigr* screen)> inspect) {
     auto* screen = tigrWindow(orig->w, orig->h, "SCI Picture", 0);
 
     Tigr* pics[] = { orig, sci };
     int picIndex = 1;
 
+    int lastButtons = 0;
     while (!tigrClosed(screen)) {
         if (tigrKeyDown(screen, TK_ESCAPE)) {
             break;
@@ -44,9 +45,9 @@ void show(Tigr* orig, Tigr* sci, std::function<void(int x, int y, Tigr* screen)>
 
         int mx, my, buttons;
         tigrMouse(screen, &mx, &my, &buttons);
-        if (buttons != 0) {
-            inspect(mx, my, screen);
-        }
+        bool tapped = buttons != 0 && lastButtons == 0;
+        lastButtons = buttons;
+        inspect(mx, my, tapped, screen);
 
         tigrUpdate(screen);
     }
@@ -76,17 +77,27 @@ int main(int argc, const char** argv) {
 
     float counter = 0;
 
-    show(bmp.get(), parser.bitmap(), [&vec, &counter](int x, int y, Tigr* scr) {
+    show(bmp.get(), parser.bitmap(), [&vec, &counter](int x, int y, bool tapped, Tigr* scr) {
         // printf("(%d:%d)\n", x, y);
         counter += tigrTime() * 3;
         int shade = 50 * (static_cast<int>(counter) % 2);
         const auto* area = vec.areaAt(x, y);
         const auto marker = tigrRGBA(200, 100 + shade, 100 + shade, 180);
         if (area != nullptr) {
-            for (int dy = 0; const auto& run : area->runs()) {
-                const auto y = area->top() + dy;
-                tigrLine(scr, run->start, y, run->start + run->length, y, marker);
-                dy++;
+            for (const auto& run : area->runs()) {
+                const auto y = run.row;
+                tigrLine(scr, run.start, y, run.start + run.length, y, marker);
+            }
+            if (tapped) {
+                printf("Lines:\n");
+                for (const auto& line : area->lines()) {
+                    printf("(%d,%d)", line.x, line.y);
+                }
+                printf("\nFills:\n");
+                for (const auto& line : area->fills()) {
+                    printf("(%d,%d)", line.x, line.y);
+                }
+                printf("\n");
             }
         }
     });

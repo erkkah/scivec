@@ -190,8 +190,8 @@ void SCIPicParser::floodFill(int x, int y) {
         return;
     }
 
-    if (x < 0 || x > 319 || y < 0 || y > 189) {
-        return;  // don't fill outside canvas
+    if (x < 0 || x > _bmp->w - 1 || y < 0 || y > _bmp->h - 1) {
+        return;
     }
 
     const auto target = tigrGet(_bmp.get(), x, y);

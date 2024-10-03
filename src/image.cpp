@@ -1,4 +1,5 @@
 #include "image.hpp"
+#include "scipic.hpp"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
@@ -83,4 +84,74 @@ std::unique_ptr<Tigr, decltype(&tigrFree)> EGAImage::asBitmap() const {
 std::span<const uint8_t> EGAImage::row(int y) const {
     assert(y < _height);
     return std::span(_bitmap.data() + _width * y, _width);
+}
+
+bool ByteImage::fillWhere(int x, int y, uint8_t c, uint8_t bg, std::function<bool(int, int)> condition) {
+    if (c == bg) {
+        return true;
+    }
+    if (get(x, y) != bg) {
+        // ???
+        return true;
+    }
+    std::vector<Point> fills;
+    fills.push_back({ x, y });
+
+    const auto check = [this, &fills, &c, &bg](int x, int y) {
+        if (x < 0 || x >= width() || y < 0 || y >= height()) {
+            return;
+        }
+
+        if (get(x, y) == bg) {
+            put(x, y, c);
+            fills.push_back({ x, y });
+        }
+    };
+
+    while (!fills.empty()) {
+        const auto& fill = fills.back();
+        int x = fill.x;
+        int y = fill.y;
+        fills.pop_back();
+        if (!condition(x, y)) {
+            return false;
+        }
+        put(x, y, c);
+        check(x + 1, y);
+        check(x - 1, y);
+        check(x, y + 1);
+        check(x, y - 1);
+        if (fills.size() > 10000) {
+            // Fill failed, log, throw, what?
+            return false;
+        }
+    }
+    return true;
+}
+
+void ByteImage::line(int x0, int y0, int x1, int y1, uint8_t c) {
+    int dx = std::abs(x1 - x0);
+    int sx = x0 < x1 ? 1 : -1;
+    int dy = -std::abs(y1 - y0);
+    int sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy;
+
+    while (true) {
+        put(x0, y0, c);
+
+        if (x0 == x1 && y0 == y1)
+            break;
+
+        int e2 = 2 * err;
+
+        if (e2 >= dy) {
+            err += dy;
+            x0 += sx;
+        }
+
+        if (e2 <= dx) {
+            err += dx;
+            y0 += sy;
+        }
+    }
 }

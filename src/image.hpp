@@ -55,8 +55,8 @@ struct EGAImage {
     std::vector<uint8_t> _bitmap;
 };
 
-struct PaletteImage {
-    PaletteImage(int width, int height) : _width{ width }, _height{ height }, _bitmap(width * height){};
+struct ByteImage {
+    ByteImage(int width, int height) : _width{ width }, _height{ height }, _bitmap(width * height){};
 
     int width() const {
         return _width;
@@ -86,6 +86,9 @@ struct PaletteImage {
     void clear(uint8_t color) {
         std::fill(_bitmap.begin(), _bitmap.end(), color);
     }
+
+    bool fillWhere(int x, int y, uint8_t c, uint8_t bg, std::function<bool(int, int)> condition);
+    void line(int x0, int y0, int x1, int y1, uint8_t c);
 
    private:
     int _width;
