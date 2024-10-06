@@ -2,8 +2,10 @@
 
 #include <utility>
 #include <unordered_map>
+#include <span>
 
-#include "image.hpp"
+constexpr size_t paletteSize = 40;
+constexpr size_t maxColors = 4 * paletteSize;
 
 using PaletteColor = std::pair<uint8_t, uint8_t>;
 
@@ -18,16 +20,17 @@ struct ColorHash {
 };
 
 struct Palette {
-    Palette(std::vector<const PaletteColor> colors);
-    PaletteColor operator[](size_t index) const;
+    Palette(std::span<const PaletteColor> colors);
+    const PaletteColor& get(size_t index) const;
+    void set(size_t index, const PaletteColor& color);
     size_t size() const;
     int index(const PaletteColor& color) const;
     int match(int x, int y, uint8_t egaColor) const;
     std::span<const PaletteColor> colors() const;
 
    private:
-    const std::vector<const PaletteColor> _colors;
-    std::unordered_map<PaletteColor, size_t, ColorHash> _indexMap;
+    void updateIndexMap() const;
+    std::vector<PaletteColor> _colors;
+    mutable bool _indexMapIsStale{ true };
+    mutable std::unordered_map<PaletteColor, size_t, ColorHash> _indexMap;
 };
-
-Palette buildPalette(const EGAImage& img);

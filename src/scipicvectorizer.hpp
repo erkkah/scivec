@@ -41,6 +41,25 @@ struct PixelRun {
     uint8_t color;
 };
 
+struct Line {
+    void add(const Point& p) {
+        _points.push_back(p);
+    }
+
+    std::span<const Point> points() const {
+        return std::span(_points);
+    }
+
+    void clear() {
+        _points.clear();
+    }
+
+    void optimize();
+
+   private:
+    std::vector<Point> _points;
+};
+
 using PixelAreaID = std::pair<int, int>;
 
 struct PixelArea {
@@ -97,7 +116,7 @@ struct PixelArea {
 
     void traceLines(const ByteImage& source);
     void optimizeLines();
-    void findFills(ByteImage& workArea, uint8_t bg);
+    void findFills(ByteImage& canvas, uint8_t bg);
 
     const std::list<PixelRun>& runs() const {
         return _runs;
@@ -107,7 +126,7 @@ struct PixelArea {
         return _top;
     }
 
-    std::span<const Point> lines() const {
+    std::span<const Line> lines() const {
         return _lines;
     }
 
@@ -118,7 +137,7 @@ struct PixelArea {
    private:
     const int _top{ 0 };
     std::list<PixelRun> _runs;
-    std::vector<Point> _lines;
+    std::vector<Line> _lines;
     std::vector<Point> _fills;
     bool _closed{ false };
 };

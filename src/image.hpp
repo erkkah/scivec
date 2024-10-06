@@ -4,8 +4,10 @@
 #include <vector>
 #include <span>
 #include <cassert>
+
 #include "stb_image.h"
 #include "tigr.h"
+#include "palette.hpp"
 
 struct ImageFile {
     ImageFile(const char* fileName);
@@ -32,6 +34,8 @@ struct EGAImage {
     static const std::array<const TPixel, 16> palette;
 
     EGAImage(Tigr& bitmap);
+    EGAImage(int w, int h) : _width(w), _height(h), _bitmap(w * h) {
+    }
 
     int width() const {
         return _width;
@@ -42,7 +46,21 @@ struct EGAImage {
     }
 
     uint8_t get(int x, int y) const {
-        return _bitmap[y * _width + x];
+        const auto index = y * _width + x;
+        assert(index < _bitmap.size());
+        return _bitmap[index];
+    }
+
+    void put(int x, int y, uint8_t p) {
+        assert(p < 16);
+        const auto index = y * _width + x;
+        assert(index < _bitmap.size());
+        _bitmap[index] = p;
+    }
+
+    void clear(uint8_t color) {
+        assert(color < 16);
+        std::fill(_bitmap.begin(), _bitmap.end(), color);
     }
 
     std::span<const uint8_t> row(int y) const;
@@ -55,8 +73,17 @@ struct EGAImage {
     std::vector<uint8_t> _bitmap;
 };
 
+Palette buildPalette(const EGAImage& img);
+
 struct ByteImage {
     ByteImage(int width, int height) : _width{ width }, _height{ height }, _bitmap(width * height){};
+    ByteImage(const ByteImage& other) = default;
+
+    void swap(ByteImage& other) {
+        std::swap(_width, other._width);
+        std::swap(_height, other._height);
+        std::swap(_bitmap, other._bitmap);
+    }
 
     int width() const {
         return _width;
@@ -89,6 +116,8 @@ struct ByteImage {
 
     bool fillWhere(int x, int y, uint8_t c, uint8_t bg, std::function<bool(int, int)> condition);
     void line(int x0, int y0, int x1, int y1, uint8_t c);
+
+    std::unique_ptr<Tigr, decltype(&tigrFree)> asBitmap(Palette& palette) const;
 
    private:
     int _width;

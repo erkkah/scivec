@@ -1,5 +1,6 @@
 #include "scipicparser.hpp"
 #include <sstream>
+#include <set>
 
 // http://sci.sierrahelp.com/Documentation/SCISpecifications/16-SCI0-SCI01PICResource.html
 // http://sciwiki.sierrahelp.com/index.php?title=Picture_Resource
@@ -35,25 +36,28 @@ constexpr uint8_t patternFlagUsePattern = 0x20;
 
 }  // namespace
 
-void SCIPicParser::parse() {
+void SCIPicParser::parse(int limit) {
     reset();
 
     if (peek(0) != 0x81 || peek(1) != 0x00) {
         throw std::runtime_error("Invalid SCI resource");
     }
 
-    tigrClear(_bmp.get(), EGAImage::palette[0x0f]);
+    _bmp.clear(0x0f);
 
     skip(2);
 
-    while (!atEnd()) {
+    int count = 0;
+    while (!atEnd() && (limit < 0 || count < limit)) {
         auto cmd = read();
 
         switch (cmd) {
             case setVisualColor: {
                 const auto colorCode = read();
-                _paletteIndex = colorCode / 40;
-                _color = colorCode % 40;
+                if (colorCode > 159) {
+                    throw std::runtime_error("Invalid color index");
+                }
+                _color = _palette.get(colorCode);
 
                 _visualEnabled = true;
             } break;
@@ -77,14 +81,17 @@ void SCIPicParser::parse() {
                 break;
 
             case longLines:
+                count++;
                 parseLongLines();
                 break;
 
             case shortRelativeLines:
+                count++;
                 parseShortRelativeLines();
                 break;
 
             case mediumRelativeLines:
+                count++;
                 parseMediumRelativeLines();
                 break;
 
@@ -93,18 +100,22 @@ void SCIPicParser::parse() {
                 break;
 
             case shortRelativePatterns:
+                count++;
                 parseShortRelativePatterns();
                 break;
 
             case mediumRelativePatterns:
+                count++;
                 parseMediumRelativePatterns();
                 break;
 
             case longPatterns:
+                count++;
                 parseLongPatterns();
                 break;
 
             case SCICommandCode::floodFill:
+                count++;
                 parseFloodFill();
                 break;
 
@@ -179,10 +190,7 @@ void SCIPicParser::drawLine(int x0, int y0, int x1, int y1) {
 }
 
 void SCIPicParser::plot(int x, int y) {
-    const auto col = _palettes.at(_paletteIndex).at(_color);
-    uint8_t effective = effectiveColor(col, x, y);
-
-    tigrPlot(_bmp.get(), x, y, EGAImage::palette[effective]);
+    _bmp.put(x, y, effectiveColor(_color, x, y));
 }
 
 void SCIPicParser::floodFill(int x, int y) {
@@ -190,28 +198,51 @@ void SCIPicParser::floodFill(int x, int y) {
         return;
     }
 
-    if (x < 0 || x > _bmp->w - 1 || y < 0 || y > _bmp->h - 1) {
+    const auto target = _bmp.get(x, y);
+
+    // Only fill white (0x0f) pixels
+    if (target != 0x0f) {
         return;
     }
 
-    const auto target = tigrGet(_bmp.get(), x, y);
-    if (target.r != 255 || target.g != 255 || target.b != 255) {
-        return;
+    std::vector<Point> fills;
+    std::set<std::pair<int, int>> filled;
+
+    auto effective = effectiveColor(_color, x, y);
+    _bmp.put(x, y, effective);
+    fills.push_back({ x, y });
+    filled.insert({ x, y });
+
+    const auto check = [this, &fills, &filled](int x, int y) {
+        if (x < 0 || x >= _bmp.width() || y < 0 || y >= _bmp.height()) {
+            return;
+        }
+
+        if (filled.contains({ x, y })) {
+            return;
+        }
+
+        if (_bmp.get(x, y) == 0x0f) {
+            _bmp.put(x, y, effectiveColor(_color, x, y));
+            fills.push_back({ x, y });
+            filled.insert({ x, y });
+        }
+    };
+
+    while (!fills.empty()) {
+        const auto& fill = fills.back();
+        int x = fill.x;
+        int y = fill.y;
+        fills.pop_back();
+
+        check(x + 1, y);
+        check(x - 1, y);
+        check(x, y + 1);
+        check(x, y - 1);
+        if (fills.size() > 32768) {
+            throw std::runtime_error("Fill stack overflow");
+        }
     }
-
-    const auto col = _palettes.front().at(_color);
-    uint8_t fill_col = ((x + y) % 2) ? col.first : col.second;
-
-    if (fill_col == 0x0f) {
-        return;
-    }
-
-    tigrPlot(_bmp.get(), x, y, EGAImage::palette[fill_col]);
-
-    floodFill(x, y + 1);
-    floodFill(x, y - 1);
-    floodFill(x - 1, y);
-    floodFill(x + 1, y);
 }
 
 namespace {
@@ -352,9 +383,14 @@ void SCIPicParser::parseMediumRelativeLines() {
     do {
         const auto yOffset = signMagnitudeOffset(read());
         const auto xOffset = twosComplementOffset(read());
-        const auto second = std::make_pair(first.first + xOffset, first.second + yOffset);
-        drawLine(first.first, first.second, second.first, second.second);
-        first = second;
+        const auto x0 = first.first;
+        const auto y0 = first.second;
+        auto x1 = x0 + xOffset;
+        auto y1 = y0 + yOffset;
+        x1 = std::clamp(x1, 0, 319);
+        y1 = std::clamp(y1, 0, 189);
+        drawLine(x0, y0, x1, y1);
+        first = { x1, y1 };
     } while (!nextIsCommand());
 }
 
@@ -425,6 +461,9 @@ void SCIPicParser::parseLongPatterns() {
 void SCIPicParser::parseFloodFill() {
     while (!nextIsCommand()) {
         auto position = readCoordinate();
+        if (position == std::make_pair(58, 37)) {
+            printf("***\n");
+        }
         floodFill(position.first, position.second);
     }
 }
@@ -435,12 +474,10 @@ void SCIPicParser::parseExtended(uint8_t cmd) {
             while (_pos <= _data.size() && !nextIsCommand()) {
                 const uint8_t i = read();
                 const uint8_t color = read();
-
-                const uint8_t palette = std::clamp(i / 40, 0, 3);
-                const uint8_t paletteIndex = i % 40;
-                auto& paletteEntry = _palettes[palette][paletteIndex];
-                paletteEntry.first = (color & 0xf0) >> 4;
-                paletteEntry.second = color & 0xf;
+                if (i > 159) {
+                    throw std::runtime_error("Invalid palette entry");
+                }
+                _palette.set(i, { (color & 0xf0) >> 4, color & 0xf });
             }
         } break;
 
@@ -450,12 +487,11 @@ void SCIPicParser::parseExtended(uint8_t cmd) {
                 throw std::runtime_error("Invalid palette index");
             }
 
-            auto& palette = _palettes[p];
+            auto base = p * 40;
 
-            for (auto i = 0; i < palette.size(); i++) {
+            for (auto i = 0; i < 40; i++) {
                 const uint8_t color = read();
-                palette[i].first = (color & 0xf0) >> 4;
-                palette[i].second = color & 0xf;
+                _palette.set(base + i, { (color & 0xf0) >> 4, color & 0xf });
             }
         } break;
 

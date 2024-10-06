@@ -3,102 +3,29 @@
 #include <cassert>
 #include <algorithm>
 
-constexpr size_t paletteSize = 40;
-constexpr size_t maxColors = 4 * paletteSize;
-
-int missingColors(std::vector<const PaletteColor>& colors) {
-    assert(colors.size() > maxColors);
-
-    std::unordered_set<int> usedFirstColors;
-    std::unordered_set<int> usedSecondColors;
-
-    for (int i = 0; i < paletteSize; i++) {
-        usedFirstColors.insert(colors[i].first);
-        usedSecondColors.insert(colors[i].second);
-    }
-
-    std::unordered_set<int> missingFirstColors;
-    std::unordered_set<int> missingSecondColors;
-
-    for (auto it = colors.begin() + maxColors; it != colors.end(); it++) {
-        if (!usedFirstColors.contains(it->first)) {
-            missingFirstColors.insert(it->first);
-        }
-        if (!usedSecondColors.contains(it->second)) {
-            missingSecondColors.insert(it->second);
-        }
-    }
-
-    return missingFirstColors.size() + missingSecondColors.size();
+Palette::Palette(std::span<const PaletteColor> colors) : _colors(colors.begin(), colors.end()) {
 }
 
-Palette buildPalette(const EGAImage& bmp) {
-    std::unordered_set<PaletteColor, ColorHash> colors;
-    std::unordered_map<PaletteColor, int, ColorHash> colorCount;
-
-    for (int x = 0; x < bmp.width() - 1; x++) {
-        for (int y = 0; y < bmp.height(); y++) {
-            const auto a = bmp.get(x, y);
-            const auto b = bmp.get(x + 1, y);
-
-            auto color = std::make_pair(a, a);
-
-            if (a != b && x < bmp.width() - 2) {
-                const auto c = bmp.get(x + 2, y);
-                // A pattern must be at least three pixels long
-                if (c == a) {
-                    if (((x + y) % 2) != 0) {
-                        color = std::make_pair(a, b);
-                    } else {
-                        color = std::make_pair(b, a);
-                    }
-                }
-            }
-
-            colorCount[color]++;
-            colors.insert(color);
-        }
+void Palette::updateIndexMap() const {
+    if (!_indexMapIsStale) {
+        return;
     }
-
-    std::vector<std::pair<PaletteColor, int>> sortedColors;
-
-    for (const auto& cc : colorCount) {
-        sortedColors.push_back(cc);
-    }
-
-    std::sort(sortedColors.begin(),
-        sortedColors.end(),
-        [](const std::pair<PaletteColor, int>& a, const std::pair<PaletteColor, int>& b) {
-            return a.second > b.second;
-        });
-
-    std::vector<const PaletteColor> palette;
-
-    for (const auto& color : sortedColors) {
-        palette.push_back(color.first);
-    }
-
-    if (palette.size() > maxColors) {
-        int missing = missingColors(palette);
-        if (missing > 0) {
-            printf("Hm, the image is too colorful, %d colors will be approximated!\n", missing);
-        }
-
-        palette.resize(maxColors);
-    }
-
-    return palette;
-}
-
-Palette::Palette(std::vector<const PaletteColor> colors) : _colors(colors) {
+    _indexMap.erase(_indexMap.begin(), _indexMap.end());
     for (int i = 0; i < _colors.size(); i++) {
         _indexMap[_colors[i]] = i;
     }
+    _indexMapIsStale = false;
 }
 
-PaletteColor Palette::operator[](size_t index) const {
+const PaletteColor& Palette::get(size_t index) const {
     assert(index < _colors.size());
     return _colors[index];
+}
+
+void Palette::set(size_t index, const PaletteColor& color) {
+    assert(index < _colors.size());
+    _colors[index] = color;
+    _indexMapIsStale = true;
 }
 
 size_t Palette::size() const {
@@ -106,6 +33,7 @@ size_t Palette::size() const {
 }
 
 int Palette::index(const PaletteColor& color) const {
+    updateIndexMap();
     if (_indexMap.contains(color)) {
         return _indexMap.at(color);
     }

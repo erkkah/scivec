@@ -62,5 +62,3 @@ struct SCICommand {
     SCICommandCode code;
     std::vector<uint8_t> params;
 };
-
-using SCIPalette = std::array<PaletteColor, 40>;

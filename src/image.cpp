@@ -3,6 +3,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+#include <unordered_set>
+
 ImageFile::ImageFile(const char* fileName) {
     int components = 0;
     auto* image = stbi_load(fileName, &_width, &_height, &components, 4);
@@ -25,22 +27,22 @@ std::unique_ptr<Tigr, decltype(&tigrFree)> ImageFile::asBitmap() const {
 }
 
 const std::array<const TPixel, 16> EGAImage::palette{ //
-    tigrRGB(0, 0, 0),
-    tigrRGB(0, 0, 159),
-    tigrRGB(0, 159, 0),
-    tigrRGB(0, 159, 159),
-    tigrRGB(159, 0, 0),
-    tigrRGB(127, 0, 159),
-    tigrRGB(159, 79, 0),
-    tigrRGB(159, 159, 159),
-    tigrRGB(79, 79, 79),
-    tigrRGB(79, 79, 255),
-    tigrRGB(0, 255, 79),
-    tigrRGB(79, 255, 255),
-    tigrRGB(255, 79, 79),
-    tigrRGB(255, 79, 255),
-    tigrRGB(255, 255, 79),
-    tigrRGB(255, 255, 255)
+    tigrRGB(0x00, 0x00, 0x00),
+    tigrRGB(0x00, 0x00, 0xaa),
+    tigrRGB(0x00, 0xaa, 0x00),
+    tigrRGB(0x00, 0xaa, 0xaa),
+    tigrRGB(0xaa, 0x00, 0x00),
+    tigrRGB(0xaa, 0x00, 0xaa),
+    tigrRGB(0xaa, 0x55, 0x00),
+    tigrRGB(0xaa, 0xaa, 0xaa),
+    tigrRGB(0x55, 0x55, 0x55),
+    tigrRGB(0x55, 0x55, 0xff),
+    tigrRGB(0x00, 0xff, 0x55),
+    tigrRGB(0x55, 0xff, 0xff),
+    tigrRGB(0xff, 0x55, 0x55),
+    tigrRGB(0xff, 0x55, 0xff),
+    tigrRGB(0xff, 0xff, 0x55),
+    tigrRGB(0xff, 0xff, 0xff)
 };
 
 int pixelDistance(const TPixel& a, const TPixel& b) {
@@ -86,15 +88,99 @@ std::span<const uint8_t> EGAImage::row(int y) const {
     return std::span(_bitmap.data() + _width * y, _width);
 }
 
+int missingColors(std::vector<const PaletteColor>& colors) {
+    assert(colors.size() > maxColors);
+
+    std::unordered_set<int> usedFirstColors;
+    std::unordered_set<int> usedSecondColors;
+
+    for (int i = 0; i < paletteSize; i++) {
+        usedFirstColors.insert(colors[i].first);
+        usedSecondColors.insert(colors[i].second);
+    }
+
+    std::unordered_set<int> missingFirstColors;
+    std::unordered_set<int> missingSecondColors;
+
+    for (auto it = colors.begin() + maxColors; it != colors.end(); it++) {
+        if (!usedFirstColors.contains(it->first)) {
+            missingFirstColors.insert(it->first);
+        }
+        if (!usedSecondColors.contains(it->second)) {
+            missingSecondColors.insert(it->second);
+        }
+    }
+
+    return missingFirstColors.size() + missingSecondColors.size();
+}
+
+Palette buildPalette(const EGAImage& bmp) {
+    std::unordered_set<PaletteColor, ColorHash> colors;
+    std::unordered_map<PaletteColor, int, ColorHash> colorCount;
+
+    for (int x = 0; x < bmp.width() - 1; x++) {
+        for (int y = 0; y < bmp.height(); y++) {
+            const auto a = bmp.get(x, y);
+            const auto b = bmp.get(x + 1, y);
+
+            auto color = std::make_pair(a, a);
+
+            if (a != b && x < bmp.width() - 2) {
+                const auto c = bmp.get(x + 2, y);
+                // A pattern must be at least three pixels long
+                if (c == a) {
+                    if (((x + y) % 2) != 0) {
+                        color = std::make_pair(a, b);
+                    } else {
+                        color = std::make_pair(b, a);
+                    }
+                }
+            }
+
+            colorCount[color]++;
+            colors.insert(color);
+        }
+    }
+
+    std::vector<std::pair<PaletteColor, int>> sortedColors;
+
+    for (const auto& cc : colorCount) {
+        sortedColors.push_back(cc);
+    }
+
+    std::sort(sortedColors.begin(),
+        sortedColors.end(),
+        [](const std::pair<PaletteColor, int>& a, const std::pair<PaletteColor, int>& b) {
+            return a.second > b.second;
+        });
+
+    std::vector<const PaletteColor> palette;
+
+    for (const auto& color : sortedColors) {
+        palette.push_back(color.first);
+    }
+
+    if (palette.size() > maxColors) {
+        int missing = missingColors(palette);
+        if (missing > 0) {
+            printf("Hm, the image is too colorful, %d colors will be approximated!\n", missing);
+        }
+
+        palette.resize(maxColors);
+    }
+
+    return Palette(palette);
+}
+
 bool ByteImage::fillWhere(int x, int y, uint8_t c, uint8_t bg, std::function<bool(int, int)> condition) {
     if (c == bg) {
         return true;
     }
     if (get(x, y) != bg) {
-        // ???
         return true;
     }
     std::vector<Point> fills;
+    put(x, y, c);
     fills.push_back({ x, y });
 
     const auto check = [this, &fills, &c, &bg](int x, int y) {
@@ -116,14 +202,13 @@ bool ByteImage::fillWhere(int x, int y, uint8_t c, uint8_t bg, std::function<boo
         if (!condition(x, y)) {
             return false;
         }
-        put(x, y, c);
+        // put(x, y, c);
         check(x + 1, y);
         check(x - 1, y);
         check(x, y + 1);
         check(x, y - 1);
-        if (fills.size() > 10000) {
-            // Fill failed, log, throw, what?
-            return false;
+        if (fills.size() > 32768) {
+            throw std::runtime_error("Fill stack overflow");
         }
     }
     return true;
@@ -154,4 +239,17 @@ void ByteImage::line(int x0, int y0, int x1, int y1, uint8_t c) {
             y0 += sy;
         }
     }
+}
+
+std::unique_ptr<Tigr, decltype(&tigrFree)> ByteImage::asBitmap(Palette& palette) const {
+    auto bmp = std::unique_ptr<Tigr, decltype(&tigrFree)>(tigrBitmap(_width, _height), &tigrFree);
+    for (auto y = 0; y < _height; y++) {
+        for (auto x = 0; x < _width; x++) {
+            const auto i = y * _width + x;
+            const auto& sci = palette.get(_bitmap[i]);
+            const auto& ega = effectiveColor(sci, x, y);
+            bmp->pix[i] = EGAImage::palette[ega];
+        }
+    }
+    return bmp;
 }
