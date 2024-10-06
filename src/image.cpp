@@ -94,7 +94,7 @@ int missingColors(std::vector<const PaletteColor>& colors) {
     std::unordered_set<int> usedFirstColors;
     std::unordered_set<int> usedSecondColors;
 
-    for (int i = 0; i < paletteSize; i++) {
+    for (int i = 0; i < maxColors; i++) {
         usedFirstColors.insert(colors[i].first);
         usedSecondColors.insert(colors[i].second);
     }
@@ -202,7 +202,6 @@ bool ByteImage::fillWhere(int x, int y, uint8_t c, uint8_t bg, std::function<boo
         if (!condition(x, y)) {
             return false;
         }
-        // put(x, y, c);
         check(x + 1, y);
         check(x - 1, y);
         check(x, y + 1);

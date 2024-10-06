@@ -145,24 +145,6 @@ void PixelArea::traceLines(const ByteImage& source) {
                     line.clear();
                 }
                 endOfTheLine = true;
-
-                // bool found = false;
-                // for (int searchY = minY; !found && searchY < maxY; searchY++) {
-                //     for (int searchX = minX; !found && searchX < maxX; searchX++) {
-                //         if (workArea.get(searchX, searchY) == color) {
-                //             if (searchX == startX && searchY == startY) {
-                //                 continue;
-                //             }
-                //             x = searchX;
-                //             y = searchY;
-                //             count = 0;
-                //             found = true;
-                //         }
-                //     }
-                // }
-                // if (!found) {
-                //     break;
-                // }
             }
 
             workArea.put(startX, startY, color + 1);
@@ -171,7 +153,6 @@ void PixelArea::traceLines(const ByteImage& source) {
                 _lines.push_back(line);
                 line.clear();
                 _closed = true;
-                // break;
             }
         }
     }
@@ -230,10 +211,6 @@ void Line::optimize() {
 }
 
 void PixelArea::findFills(ByteImage& canvas, uint8_t bg) {
-    // if (!_closed) {
-    //     return;
-    // }
-
     const auto c = color();
 
     if (c == bg) {
@@ -462,8 +439,6 @@ void SCIPicVectorizer::scanRow(int y, std::vector<PixelAreaID>& columnAreas) {
     _areas[currentArea].extendLastRunTo(_source.width() - 1);
 }
 
-// using Line = std::pair<Point, Point>;
-
 std::vector<uint8_t> encodeCoordinate(int x, int y) {
     const int upperX = x & 0xf00;
     const int upperY = y & 0xf00;
@@ -476,13 +451,6 @@ std::vector<uint8_t> encodeCoordinate(int x, int y) {
 SCICommand encodeVisual(uint8_t color) {
     return SCICommand{ .code = SCICommandCode::setVisualColor, .params = { color } };
 }
-
-// SCICommand encodeLine(const Line& line) {
-//     auto coordinates = encodeCoordinate(line.first.x, line.first.y);
-//     auto endCoordinate = encodeCoordinate(line.second.x, line.second.y);
-//     coordinates.insert(coordinates.end(), endCoordinate.begin(), endCoordinate.end());
-//     return SCICommand{ .code = SCICommandCode::longLines, .params = coordinates };
-// }
 
 SCICommand encodeMultiLine(std::span<const Point> coordinates) {
     std::vector<uint8_t> params;
