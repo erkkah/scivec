@@ -114,9 +114,10 @@ struct PixelArea {
         return _runs.empty();
     }
 
+    void fillWithLines();
     void traceLines(const ByteImage& source);
     void optimizeLines();
-    void findFills(ByteImage& canvas, uint8_t bg);
+    void findFills(PaletteImage& canvas, uint8_t bg);
 
     const std::list<PixelRun>& runs() const {
         return _runs;

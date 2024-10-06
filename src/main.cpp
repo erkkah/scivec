@@ -101,9 +101,10 @@ int main(int argc, const char** argv) {
     float counter = 0;
     int limit = 1;
 
+    auto orig = ei.asBitmap();
     auto converted = parser.bitmap();
 
-    show(bmp,
+    show(orig.get(),
         converted.get(),
         [&vec, &counter, &palette, &limit, &parser, &converted](int x, int y, bool tapped, Tigr* scr) {
             const auto preLimit = limit;

@@ -4,6 +4,7 @@
 #include "stb_image.h"
 
 #include <unordered_set>
+#include <set>
 
 ImageFile::ImageFile(const char* fileName) {
     int components = 0;
@@ -172,27 +173,48 @@ Palette buildPalette(const EGAImage& bmp) {
     return Palette(palette);
 }
 
-bool ByteImage::fillWhere(int x, int y, uint8_t c, uint8_t bg, std::function<bool(int, int)> condition) {
-    if (c == bg) {
-        return true;
-    }
-    if (get(x, y) != bg) {
-        return true;
-    }
-    std::vector<Point> fills;
-    put(x, y, c);
-    fills.push_back({ x, y });
+void ByteImage::copyFrom(const ByteImage& other) {
+    assert(other.width() == width());
+    assert(other.height() == height());
+    std::copy(other._bitmap.begin(), other._bitmap.end(), _bitmap.begin());
+}
 
-    const auto check = [this, &fills, &c, &bg](int x, int y) {
+bool PaletteImage::fillWhere(int x,
+    int y,
+    uint8_t colorIndex,
+    uint8_t bgColorValue,
+    std::function<bool(int, int)> condition) {
+    if (get(x, y) != bgColorValue) {
+        return true;
+    }
+    const auto& color = _palette.get(colorIndex);
+    if (color.first == bgColorValue || color.second == bgColorValue) {
+        return false;
+    }
+
+    std::vector<Point> fills;
+    std::set<std::pair<int, int>> filled;
+
+    const auto check = [this, &fills, &filled, &color, &colorIndex, &bgColorValue](int x, int y) {
         if (x < 0 || x >= width() || y < 0 || y >= height()) {
             return;
         }
 
-        if (get(x, y) == bg) {
-            put(x, y, c);
+        if (filled.contains({ x, y })) {
+            return;
+        }
+
+        if (get(x, y) == bgColorValue) {
             fills.push_back({ x, y });
         }
+        filled.insert({ x, y });
     };
+
+    check(x, y);
+
+    if (fills.empty()) {
+        return false;
+    }
 
     while (!fills.empty()) {
         const auto& fill = fills.back();
@@ -202,6 +224,8 @@ bool ByteImage::fillWhere(int x, int y, uint8_t c, uint8_t bg, std::function<boo
         if (!condition(x, y)) {
             return false;
         }
+        put(x, y, colorIndex);
+
         check(x + 1, y);
         check(x - 1, y);
         check(x, y + 1);
@@ -213,7 +237,13 @@ bool ByteImage::fillWhere(int x, int y, uint8_t c, uint8_t bg, std::function<boo
     return true;
 }
 
-void ByteImage::line(int x0, int y0, int x1, int y1, uint8_t c) {
+void PaletteImage::put(int x, int y, uint8_t colorIndex) {
+    const auto& color = _palette.get(colorIndex);
+    const auto ec = effectiveColor(color, x, y);
+    ByteImage::put(x, y, ec);
+}
+
+void PaletteImage::line(int x0, int y0, int x1, int y1, uint8_t colorIndex) {
     int dx = std::abs(x1 - x0);
     int sx = x0 < x1 ? 1 : -1;
     int dy = -std::abs(y1 - y0);
@@ -221,7 +251,7 @@ void ByteImage::line(int x0, int y0, int x1, int y1, uint8_t c) {
     int err = dx + dy;
 
     while (true) {
-        put(x0, y0, c);
+        put(x0, y0, colorIndex);
 
         if (x0 == x1 && y0 == y1)
             break;

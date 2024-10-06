@@ -8,6 +8,9 @@
 
 namespace {
 
+int lastX = 0;
+int lastY = 0;
+
 int signMagnitudeOffset(uint8_t v) {
     if ((v & 0x80) != 0) {
         return -(v & 0x7f);
@@ -130,6 +133,9 @@ void SCIPicParser::parse(int limit) {
                 throw std::runtime_error("Unhandled command " + hex(cmd));
         }
     }
+    if (limit >= 1) {
+        printf("Last coordinate: (%d:%d)\n", lastX, lastY);
+    }
 }
 
 /// Data stream stuff
@@ -225,8 +231,8 @@ void SCIPicParser::floodFill(int x, int y) {
         if (_bmp.get(x, y) == 0x0f) {
             _bmp.put(x, y, effectiveColor(_color, x, y));
             fills.push_back({ x, y });
-            filled.insert({ x, y });
         }
+        filled.insert({ x, y });
     };
 
     while (!fills.empty()) {
@@ -360,7 +366,10 @@ std::pair<int, int> SCIPicParser::readCoordinate() {
     const auto upperXY = read();
     const auto lowerX = read();
     const auto lowerY = read();
-    return std::make_pair((upperXY & 0xf0) << 4 | lowerX, (upperXY & 0xf) << 8 | lowerY);
+    const auto coord = std::make_pair((upperXY & 0xf0) << 4 | lowerX, (upperXY & 0xf) << 8 | lowerY);
+    lastX = coord.first;
+    lastY = coord.second;
+    return coord;
 }
 
 bool SCIPicParser::nextIsCommand() const {
@@ -461,9 +470,6 @@ void SCIPicParser::parseLongPatterns() {
 void SCIPicParser::parseFloodFill() {
     while (!nextIsCommand()) {
         auto position = readCoordinate();
-        if (position == std::make_pair(58, 37)) {
-            printf("***\n");
-        }
         floodFill(position.first, position.second);
     }
 }

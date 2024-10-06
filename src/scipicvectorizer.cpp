@@ -6,6 +6,16 @@
 #include <map>
 #include <vector>
 
+void PixelArea::fillWithLines() {
+    // ??? Simple, stupid line fill
+    for (const auto& run : _runs) {
+        Line l;
+        l.add(Point(run.start, run.row));
+        l.add(Point(run.start + run.length - 1, run.row));
+        _lines.push_back(l);
+    }
+}
+
 void PixelArea::traceLines(const ByteImage& source) {
     if (_runs.empty()) {
         return;
@@ -210,14 +220,13 @@ void Line::optimize() {
     std::swap(optimized, _points);
 }
 
-void PixelArea::findFills(ByteImage& canvas, uint8_t bg) {
+void PixelArea::findFills(PaletteImage& canvas, uint8_t bg) {
+    // Remember - our canvas pixel values are indices into the SCI palette.
+    // Flood fills are based on areas of same effective color.
+
     const auto c = color();
 
-    if (c == bg) {
-        return;
-    }
-
-    ByteImage workArea(canvas);
+    PaletteImage workArea(canvas);
 
     bool fillOK = true;
 
@@ -246,33 +255,35 @@ void PixelArea::findFills(ByteImage& canvas, uint8_t bg) {
         return;
     }
 
-    workArea = canvas;
     _fills.clear();
 
     for (const auto& line : _lines) {
         const auto points = line.points();
 
         Point p0 = points.front();
-        workArea.put(p0.x, p0.y, c);
+        canvas.put(p0.x, p0.y, c);
 
         for (const auto& p : points.subspan(1)) {
-            workArea.line(p0.x, p0.y, p.x, p.y, c);
+            canvas.line(p0.x, p0.y, p.x, p.y, c);
             p0 = p;
         }
     }
+
+    workArea.copyFrom(canvas);
 
     for (const auto& run : _runs) {
         int row = run.row;
         for (int col = run.start; col < run.start + run.length; col++) {
             if (workArea.get(col, row) == bg) {
                 fillOK = workArea.fillWhere(col, row, c, bg, [this](int x, int y) {
-                    if (contains(x, y)) {
-                        return true;
-                    }
-                    return false;
+                    return contains(x, y);
                 });
-                assert(fillOK);
-                _fills.push_back({ col, row });
+                if (fillOK) {
+                    _fills.push_back({ col, row });
+                } else {
+                    _fills.clear();
+                    return;
+                }
             }
         }
     }
@@ -500,8 +511,8 @@ std::vector<SCICommand> SCIPicVectorizer::scan() {
         scanRow(y, rowMemory);
     }
 
-    ByteImage canvas(_source.width(), _source.height());
-    canvas.clear(0xff);
+    PaletteImage canvas(_source.width(), _source.height(), _colors);
+    canvas.clear(0xf);
 
     int totalLines = 0;
     int totalFills = 0;
@@ -509,13 +520,22 @@ std::vector<SCICommand> SCIPicVectorizer::scan() {
 
     for (auto& kv : _areas) {
         auto& area = _areas.at(kv.first);
-        area.traceLines(_paletteImage);
-        linesRemoved += area.lines().size();
-        totalLines += area.lines().size();
-        // area.optimizeLines();
-        linesRemoved -= area.lines().size();
-        area.findFills(canvas, 0xff);
-        totalFills += area.fills().size();
+        const auto& color = _colors.get(area.color());
+        if (color.first == 0xf && color.second == 0xf) {
+            continue;
+        }
+        if (color.first == 0xf || color.second == 0xf) {
+            area.fillWithLines();
+        } else {
+            area.traceLines(_paletteImage);
+            linesRemoved += area.lines().size();
+            totalLines += area.lines().size();
+            area.optimizeLines();
+            linesRemoved -= area.lines().size();
+
+            area.findFills(canvas, 0xf);
+            totalFills += area.fills().size();
+        }
     }
 
     // std::vector sortedAreas(_areas.begin(), _areas.end());

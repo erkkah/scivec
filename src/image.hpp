@@ -114,8 +114,7 @@ struct ByteImage {
         std::fill(_bitmap.begin(), _bitmap.end(), color);
     }
 
-    bool fillWhere(int x, int y, uint8_t c, uint8_t bg, std::function<bool(int, int)> condition);
-    void line(int x0, int y0, int x1, int y1, uint8_t c);
+    void copyFrom(const ByteImage& other);
 
     std::unique_ptr<Tigr, decltype(&tigrFree)> asBitmap(Palette& palette) const;
 
@@ -123,4 +122,16 @@ struct ByteImage {
     int _width;
     int _height;
     std::vector<uint8_t> _bitmap;
+};
+
+struct PaletteImage : public ByteImage {
+    PaletteImage(int width, int height, const Palette& palette) : ByteImage(width, height), _palette(palette) {
+    }
+
+    void put(int x, int y, uint8_t colorIndex);
+    bool fillWhere(int x, int y, uint8_t colorIndex, uint8_t bgColorValue, std::function<bool(int, int)> condition);
+    void line(int x0, int y0, int x1, int y1, uint8_t colorIndex);
+
+   private:
+    const Palette& _palette;
 };
