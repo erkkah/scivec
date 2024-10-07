@@ -1,4 +1,5 @@
 #include "scipicvectorizer.hpp"
+#include "scipicencoder.hpp"
 #include <cassert>
 #include <span>
 #include <ranges>
@@ -291,9 +292,6 @@ void PixelArea::findFills(PaletteImage& canvas, uint8_t bg) {
     workArea.swap(canvas);
 }
 
-// ??? 1: Använd även vertikala positioner när paletten byggs
-// ??? 2: Fixa pickColor så att den kollar färgpar i olika väderstreck
-
 int SCIPicVectorizer::pickColor(int x, int y, int leftColor, std::span<const uint8_t> previousRow) const {
     const auto colorAt = [this](int x, int y, int dx, int dy) {
         assert(abs(dx) == 1 || abs(dy) == 1);
@@ -450,34 +448,6 @@ void SCIPicVectorizer::scanRow(int y, std::vector<PixelAreaID>& columnAreas) {
     _areas[currentArea].extendLastRunTo(_source.width() - 1);
 }
 
-std::vector<uint8_t> encodeCoordinate(int x, int y) {
-    const int upperX = x & 0xf00;
-    const int upperY = y & 0xf00;
-    const uint8_t upperXY = (upperX >> 4) | (upperY >> 8);
-    const uint8_t lowerX = x & 0xff;
-    const uint8_t lowerY = y & 0xff;
-    return { upperXY, lowerX, lowerY };
-}
-
-SCICommand encodeVisual(uint8_t color) {
-    return SCICommand{ .code = SCICommandCode::setVisualColor, .params = { color } };
-}
-
-SCICommand encodeMultiLine(std::span<const Point> coordinates) {
-    std::vector<uint8_t> params;
-
-    for (const auto& coord : coordinates) {
-        auto coordinateData = encodeCoordinate(coord.x, coord.y);
-        params.insert(params.end(), coordinateData.begin(), coordinateData.end());
-    }
-
-    return SCICommand{ .code = SCICommandCode::longLines, .params = params };
-}
-
-SCICommand encodeFill(int x, int y) {
-    return SCICommand{ .code = SCICommandCode::floodFill, .params = encodeCoordinate(x, y) };
-}
-
 void encodeAreaLines(const PixelArea& area, std::vector<SCICommand>& sink) {
     sink.push_back(encodeVisual(area.color()));
 
@@ -501,7 +471,7 @@ void encodeAreas(const std::map<PixelAreaID, PixelArea>& areas, std::vector<SCIC
     }
 }
 
-std::vector<SCICommand> SCIPicVectorizer::scan() {
+void SCIPicVectorizer::scan() {
     _areas.clear();
     createPaletteImage();
 
@@ -545,17 +515,9 @@ std::vector<SCICommand> SCIPicVectorizer::scan() {
 
     printf("Scanner found %zu areas, %d lines and %d fills\n", _areas.size(), totalLines, totalFills);
     printf("%d lines removed\n", linesRemoved);
+}
 
-    // int totalPixels = 0;
-
-    // for (const auto& area : _areas) {
-    //     const auto rows = area->runs();
-    //     for (const auto& row : rows) {
-    //         totalPixels += row->length;
-    //     }
-    // }
-    // assert(totalPixels == _source.height() * _source.width());
-
+std::vector<SCICommand> SCIPicVectorizer::encode() const {
     std::vector<SCICommand> commands;
 
     std::vector<uint8_t> params{ SCIExtendedCommandCode::setPaletteEntries };

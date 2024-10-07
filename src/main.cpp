@@ -120,7 +120,8 @@ void cmdConvert(Params params, const Flags& flags) {
     const EGAImage ei(*bmp);
 
     auto vec = SCIPicVectorizer(ei);
-    auto commands = vec.scan();
+    vec.scan();
+    auto commands = vec.encode();
 
     std::vector<uint8_t> sciData{ 0x81, 0x00 };
 
@@ -160,7 +161,7 @@ void cmdConvert(Params params, const Flags& flags) {
                 }
             }
         }
-        fprintf(stderr, "Conversion verifies OK");
+        fprintf(stderr, "Conversion verifies OK\n");
     }
 
     if (flags.contains("-show")) {

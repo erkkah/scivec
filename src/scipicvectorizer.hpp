@@ -151,7 +151,8 @@ struct SCIPicVectorizer {
         printf("Found %zu distinct palette colors\n", _colors.size());
     }
 
-    std::vector<SCICommand> scan();
+    void scan();
+    std::vector<SCICommand> encode() const;
     const PixelArea* areaAt(int x, int y) const;
 
    private:

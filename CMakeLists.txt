@@ -13,6 +13,7 @@ add_executable(scivec
     src/palette.cpp
     src/scipicparser.cpp
     src/scipicvectorizer.cpp
+    src/scipicencoder.cpp
 )
 
 target_link_libraries(scivec PRIVATE
