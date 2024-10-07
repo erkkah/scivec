@@ -63,19 +63,12 @@ struct Line {
 using PixelAreaID = std::pair<int, int>;
 
 struct PixelArea {
-    PixelArea(const PixelRun& run) : _top{ run.row } {
-    }
-
-    PixelArea(int row, int start, uint8_t color) : _top{ row } {
+    PixelArea(int row, int start, uint8_t color) : _top(row), _color(color) {
         _runs.push_back(PixelRun(row, start, 1, color));
     }
 
-    PixelArea() {
-    }
+    PixelArea() = default;
 
-    // void add(const PixelRun& run) {
-    //     _runs.push_back(run);
-    // }
     bool contains(int x, int y) const {
         // Use a map?
         for (const auto& run : _runs) {
@@ -95,13 +88,12 @@ struct PixelArea {
     }
 
     void merge(PixelArea& other) {
-        assert(color() == other.color());
+        assert(_color == other._color);
         _runs.splice(_runs.end(), other._runs);
     }
 
     uint8_t color() const {
-        assert(!_runs.empty());
-        return _runs.front().color;
+        return _color;
     }
 
     PixelAreaID id() const {
@@ -136,7 +128,8 @@ struct PixelArea {
     }
 
    private:
-    const int _top{ 0 };
+    int _top{ 0 };
+    std::uint8_t _color;
     std::list<PixelRun> _runs;
     std::vector<Line> _lines;
     std::vector<Point> _fills;
@@ -148,7 +141,6 @@ using PixelRunList = std::vector<PixelRun>;
 struct SCIPicVectorizer {
     SCIPicVectorizer(const EGAImage& bmp)
         : _source(bmp), _colors(buildPalette(bmp)), _paletteImage(bmp.width(), bmp.height()) {
-        printf("Found %zu distinct palette colors\n", _colors.size());
     }
 
     void scan();
@@ -156,7 +148,6 @@ struct SCIPicVectorizer {
     const PixelArea* areaAt(int x, int y) const;
 
    private:
-    // std::shared_ptr<PixelArea> joinAreas(std::shared_ptr<PixelArea> a, std::shared_ptr<PixelArea> b);
     int pickColor(int x, int y, int previousColor, std::span<const uint8_t> previousRow) const;
     void createPaletteImage();
     void scanRow(int y, std::vector<PixelAreaID>& columnAreas);
@@ -165,6 +156,6 @@ struct SCIPicVectorizer {
     const Palette _colors;
     ByteImage _paletteImage;
 
-    std::map<PixelAreaID, PixelArea> _areas;
-    // std::map<std::pair<int, int>, std::shared_ptr<PixelArea>> _pixelAreas;
+    std::map<PixelAreaID, PixelArea> _areaMap;
+    std::list<PixelArea> _sortedAreas;
 };
