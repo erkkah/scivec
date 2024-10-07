@@ -23,29 +23,6 @@ target_link_libraries(scivec PRIVATE
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     target_link_libraries(scivec PRIVATE
         "-framework CoreFoundation"
-    )
-endif()
-
-include(ExternalProject)
-
-# TIGR
-externalproject_add(tigr
-    GIT_REPOSITORY https://github.com/erkkah/tigr
-    GIT_TAG "v3.1.0"
-
-    USES_TERMINAL_DOWNLOAD TRUE
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND ""
-    INSTALL_COMMAND ""
-    BYPRODUCTS "<SOURCE_DIR>/tigr.c"
-)
-
-add_dependencies(scivec tigr)
-ExternalProject_Get_property(tigr SOURCE_DIR)
-set(TIGR ${SOURCE_DIR})
-
-if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
-    target_link_libraries(scivec PRIVATE
         "-framework OpenGL"
         "-framework Cocoa"
     )
@@ -60,21 +37,24 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     target_link_options(scivec PRIVATE "-static")
 endif()
 
-# incbin
-externalproject_add(incbin
-    GIT_REPOSITORY https://github.com/graphitemaster/incbin
-    GIT_TAG "main"
-
-    USES_TERMINAL_DOWNLOAD TRUE
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND ""
-    INSTALL_COMMAND ""
-    BYPRODUCTS "<SOURCE_DIR>/incbin.c"
+# TIGR
+FetchContent_Declare(
+    tigr
+    GIT_REPOSITORY https://github.com/erkkah/tigr
+    GIT_TAG "v3.1.0"
 )
 
-add_dependencies(scivec incbin)
-ExternalProject_Get_property(incbin SOURCE_DIR)
-set(INCBIN ${SOURCE_DIR})
+# incbin
+FetchContent_Declare(
+    incbin
+    GIT_REPOSITORY https://github.com/graphitemaster/incbin
+    GIT_TAG "main"
+)
+
+FetchContent_MakeAvailable(tigr incbin)
+
+set(TIGR ${tigr_SOURCE_DIR})
+set(INCBIN ${incbin_SOURCE_DIR})
 
 target_include_directories(scivec PUBLIC
     ${TIGR}
