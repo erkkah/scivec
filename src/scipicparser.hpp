@@ -20,7 +20,7 @@
 const PaletteColor defaultSCIPalette[] = { SCI_COLORS, SCI_COLORS, SCI_COLORS, SCI_COLORS };
 
 struct SCIPicParser {
-    SCIPicParser(std::span<const uint8_t> data) : _data(data), _bmp(320, 200), _palette(defaultSCIPalette) {
+    SCIPicParser(std::span<const uint8_t> data) : _data(data), _bmp(320, 190), _palette(defaultSCIPalette) {
     }
 
     void parse(int limit = -1);

@@ -6,9 +6,10 @@
 #include <unordered_set>
 #include <set>
 
-ImageFile::ImageFile(const char* fileName) {
+ImageFile::ImageFile(std::string_view fileName) {
     int components = 0;
-    auto* image = stbi_load(fileName, &_width, &_height, &components, 4);
+    std::string strName(fileName);
+    auto* image = stbi_load(strName.c_str(), &_width, &_height, &components, 4);
     if (image == nullptr) {
         throw std::runtime_error("Failed to load image file");
     }

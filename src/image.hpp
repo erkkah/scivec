@@ -10,7 +10,7 @@
 #include "palette.hpp"
 
 struct ImageFile {
-    ImageFile(const char* fileName);
+    ImageFile(std::string_view fileName);
 
     int width() const {
         return _width;
