@@ -133,9 +133,9 @@ void SCIPicParser::parse(int limit) {
                 throw std::runtime_error("Unhandled command " + hex(cmd));
         }
     }
-    if (limit >= 1) {
-        printf("Last coordinate: (%d:%d)\n", lastX, lastY);
-    }
+    // if (limit >= 1) {
+    //     printf("Last coordinate: (%d:%d)\n", lastX, lastY);
+    // }
 }
 
 /// Data stream stuff

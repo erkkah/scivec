@@ -450,7 +450,7 @@ void SCIPicVectorizer::scanRow(int y, std::vector<PixelAreaID>& columnAreas) {
 
 void encodeAreaLines(const PixelArea& area, std::vector<SCICommand>& sink) {
     for (const auto& line : area.lines()) {
-        sink.push_back(encodeMultiLine(line.points()));
+        encodeMultiLine(line.points(), sink);
     }
 }
 
