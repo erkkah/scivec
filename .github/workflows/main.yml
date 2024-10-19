@@ -25,6 +25,10 @@ jobs:
               if: startsWith(matrix.os, 'windows')
               run: choco install mingw
 
+            - name: Install Linux dependencies
+              if: startsWith(matrix.os, 'ubuntu')
+              run: sudo apt install libgl-dev libglu1-mesa-dev
+
             - name: Configure
               run: cmake -B build
 
