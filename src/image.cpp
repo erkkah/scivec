@@ -90,7 +90,7 @@ std::span<const uint8_t> EGAImage::row(int y) const {
     return std::span(_bitmap.data() + _width * y, _width);
 }
 
-int missingColors(std::vector<const PaletteColor>& colors) {
+int missingColors(std::vector<PaletteColor>& colors) {
     assert(colors.size() > maxColors);
 
     std::unordered_set<int> usedFirstColors;
@@ -156,7 +156,7 @@ Palette buildPalette(const EGAImage& bmp) {
             return a.second > b.second;
         });
 
-    std::vector<const PaletteColor> palette;
+    std::vector<PaletteColor> palette;
 
     for (const auto& color : sortedColors) {
         palette.push_back(color.first);
