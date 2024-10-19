@@ -71,7 +71,13 @@ void show(std::initializer_list<NamedPic> pics, std::function<void(int x, int y,
 }
 
 void help() {
-    fprintf(stderr, "HELP!\n");
+    fprintf(stderr,
+        "Usage:\n"
+        "    scivec convert <input image file> <output sci file> [options]\n"
+        "    scivec show <image file>\n"
+        "        -show        Show converted results\n"
+        "        -noverify    Skip verification of converted image\n"
+        "        -nodimcheck  Skip input dimensions check\n");
 }
 
 void fatal(const char* message) {
