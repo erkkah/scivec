@@ -1,0 +1,32 @@
+name: SCIVEC app
+
+on:
+    push:
+        branches-ignore:
+            - "test-*"
+    workflow_dispatch:
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    build:
+        name: Build app
+        runs-on: ${{ matrix.os }}
+        strategy:
+            matrix:
+                os: [macos-latest, ubuntu-latest, windows-latest]
+        steps:
+            - name: Check out code
+              uses: actions/checkout@v4
+
+            - name: Install windows build helpers
+              if: startsWith(matrix.os, 'windows')
+              run: choco install mingw
+
+            - name: Configure
+              run: cmake -B build
+
+            - name: Build
+              run: cmake --build build
