@@ -4,6 +4,7 @@
 #include <vector>
 #include <span>
 #include <cassert>
+#include <functional>
 
 #include "stb_image.h"
 #include "tigr.h"
