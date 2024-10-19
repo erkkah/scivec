@@ -3,6 +3,7 @@
 #include <utility>
 #include <unordered_map>
 #include <span>
+#include <cstdint>
 
 constexpr size_t paletteSize = 40;
 constexpr size_t maxColors = 4 * paletteSize;
