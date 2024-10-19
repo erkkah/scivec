@@ -8,7 +8,7 @@
 #include "palette.hpp"
 
 std::vector<uint8_t> loadFile(std::string_view fileName) {
-    std::ifstream ifs(fileName, std::ios::binary | std::ios::ate);
+    std::ifstream ifs(std::string(fileName), std::ios::binary | std::ios::ate);
     if (!ifs.is_open()) {
         throw std::runtime_error("Failed to open input");
     }
@@ -27,7 +27,7 @@ std::vector<uint8_t> loadFile(std::string_view fileName) {
 }
 
 void saveFile(std::string_view fileName, std::span<const uint8_t> data) {
-    std::ofstream ofs(fileName, std::ios::binary);
+    std::ofstream ofs(std::string(fileName), std::ios::binary);
     if (!ofs.is_open()) {
         throw std::runtime_error("Failed to open output");
     }
