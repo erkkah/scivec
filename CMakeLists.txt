@@ -29,6 +29,14 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     )
 endif()
 
+if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+    target_link_libraries(scivec PRIVATE
+        GLU
+        GL
+        X11
+    )
+endif()
+
 if(${CMAKE_SYSTEM_NAME} MATCHES "Windows")
     target_link_libraries(scivec PRIVATE
         opengl32
