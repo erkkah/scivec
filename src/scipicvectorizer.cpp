@@ -351,12 +351,25 @@ int SCIPicVectorizer::pickColor(int x, int y, int leftColor, std::span<const uin
         auto c = colorAt(xa, ya, dx, dy);
         if (c != -1) {
             if (xa != x || ya != y) {
-                if (counts[c] != 0) {
+                if (counts.contains(c)) {
                     counts[c]++;
                 }
             } else {
                 counts[c]++;
             }
+        }
+    }
+
+    constexpr int sameColorBias = 3;
+
+    if (counts.contains(leftColor)) {
+        counts[leftColor] += sameColorBias;
+    }
+
+    if (!previousRow.empty()) {
+        auto upperColor = previousRow[x];
+        if (counts.contains(upperColor)) {
+            counts[upperColor] += sameColorBias;
         }
     }
 
@@ -478,6 +491,13 @@ void encodeAreas(const std::list<PixelArea>& areas, std::vector<SCICommand>& sin
     }
 }
 
+bool singlePixelRunMatchesArea(const PixelRun& run, const PixelArea& area, const Palette& p) {
+    assert(run.length == 1);
+    const auto& runColor = p.get(run.color);
+    const auto& areaColor = p.get(area.color());
+    return effectiveColor(runColor, run.start, run.row) == effectiveColor(areaColor, run.start, run.row);
+}
+
 void SCIPicVectorizer::scan() {
     _areaMap.clear();
     _sortedAreas.clear();
@@ -497,7 +517,16 @@ void SCIPicVectorizer::scan() {
         _sortedAreas.push_back(kv.second);
     }
 
-    assert(_areaMap.size() == _sortedAreas.size());
+    int candidates = 0;
+    auto a0 = _sortedAreas.front();
+    for (auto a = _sortedAreas.begin()++; a != _sortedAreas.end(); a++) {
+        if (a->runs().size() == 1 && a->runs().front().length == 1 &&
+            singlePixelRunMatchesArea(a->runs().front(), a0, _colors)) {
+            candidates++;
+        }
+    }
+
+    printf("%d single pixel areas could be eliminated\n", candidates);
 
     _sortedAreas.sort([](const auto& a, const auto& b) {
         return a.color() <= b.color();

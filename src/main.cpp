@@ -54,7 +54,8 @@ void show(std::initializer_list<NamedPic> pics, std::function<void(int x, int y,
         tigrBlit(screen, pic.first, 0, 0, 0, 0, pic.first->w, pic.first->h);
 
         if (tigrKeyDown(screen, TK_SPACE)) {
-            picIndex = 1 - picIndex;
+            picIndex++;
+            picIndex %= pics.size();
         }
         tigrPrint(screen, tfont, 1, screen->h - 12, { 255, 255, 255, 255 }, "%s\n", pic.second.c_str());
 
@@ -181,10 +182,10 @@ void cmdConvert(Params params, const Flags& flags) {
                     limit--;
                 }
                 if (tigrKeyHeld(scr, TK_RIGHT)) {
-                    limit++;
+                    limit += tigrKeyHeld(scr, TK_SHIFT) ? 10 : 1;
                 }
                 if (tigrKeyHeld(scr, TK_LEFT) && limit > 1) {
-                    limit--;
+                    limit -= tigrKeyHeld(scr, TK_SHIFT) ? 10 : 1;
                 }
                 if (preLimit != limit) {
                     parser.parse(limit);
