@@ -74,10 +74,11 @@ void help() {
     fprintf(stderr,
         "Usage:\n"
         "    scivec convert <input image file> <output sci file> [options]\n"
-        "    scivec show <image file>\n"
         "        -show        Show converted results\n"
         "        -noverify    Skip verification of converted image\n"
-        "        -nodimcheck  Skip input dimensions check\n");
+        "        -nodimcheck  Skip input dimensions check\n"
+        "\n"
+        "    scivec show <sci file>\n");
 }
 
 void fatal(const char* message) {
