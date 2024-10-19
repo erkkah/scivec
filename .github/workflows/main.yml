@@ -30,6 +30,8 @@ jobs:
               run: sudo apt install libgl-dev libglu1-mesa-dev
 
             - name: Configure
+              env:
+                  CMAKE_BUILD_TYPE: Release
               run: cmake -G "Unix Makefiles" -B build
 
             - name: Build
