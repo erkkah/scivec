@@ -34,3 +34,9 @@ jobs:
 
             - name: Build
               run: cmake --build build
+
+            - name: Store
+              uses: actions/upload-artifact@v4
+              with:
+                  name: binary-${{ matrix.os }}
+                  path: build/scivec*
