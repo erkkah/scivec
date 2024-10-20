@@ -4,6 +4,8 @@ cmake_minimum_required(VERSION 3.16)
 cmake_policy(SET CMP0135 NEW)
 include(FetchContent)
 
+set(CMAKE_OSX_ARCHITECTURES "x86_64;arm64" CACHE STRING "" FORCE)
+
 project(scivec)
 set(CMAKE_CXX_STANDARD 20)
 
