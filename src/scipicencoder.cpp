@@ -153,3 +153,34 @@ void encodeMultiLine(std::span<const Point> coordinates, std::vector<SCICommand>
 SCICommand encodeFill(int x, int y) {
     return SCICommand{ .code = SCICommandCode::floodFill, .params = encodeCoordinate(x, y) };
 }
+
+void encodeColors(const Palette& palette, std::vector<SCICommand>& sink) {
+    auto colors = palette.colors();
+    int colorsLeft = colors.size();
+    int colorIndex = 0;
+    int paletteIndex = 0;
+
+    while (colorsLeft >= 40) {
+        std::vector<uint8_t> params{ SCIExtendedCommandCode::setEntirePalette };
+        params.push_back(paletteIndex);
+        const auto paletteColors = colors.subspan(paletteIndex * 40, 40);
+        for (const auto color : paletteColors) {
+            uint8_t colorValue = (color.first << 4) | color.second;
+            params.push_back(colorValue);
+        }
+        sink.push_back(SCICommand{ .code = SCICommandCode::extendedCommand, .params = params });
+        colorsLeft -= 40;
+        paletteIndex++;
+    }
+
+    {
+        std::vector<uint8_t> params{ SCIExtendedCommandCode::setPaletteEntries };
+        const auto remainder = colors.subspan(paletteIndex * 40);
+        for (int i = paletteIndex * 40; const auto& color : remainder) {
+            params.push_back(i++);
+            uint8_t colorValue = (color.first << 4) | color.second;
+            params.push_back(colorValue);
+        }
+        sink.push_back(SCICommand{ .code = SCICommandCode::extendedCommand, .params = params });
+    }
+}

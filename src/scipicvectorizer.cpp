@@ -550,14 +550,7 @@ void SCIPicVectorizer::scan() {
 std::vector<SCICommand> SCIPicVectorizer::encode() const {
     std::vector<SCICommand> commands;
 
-    std::vector<uint8_t> params{ SCIExtendedCommandCode::setPaletteEntries };
-    for (int i = 0; const auto& color : _colors.colors()) {
-        params.push_back(i++);
-        uint8_t colorValue = (color.first << 4) | color.second;
-        params.push_back(colorValue);
-    }
-    commands.push_back(SCICommand{ .code = SCICommandCode::extendedCommand, .params = params });
-
+    encodeColors(_colors, commands);
     encodeAreas(_sortedAreas, commands);
     printf("Produced %zu commands\n", commands.size());
 
