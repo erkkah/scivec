@@ -1,5 +1,6 @@
 #pragma once
 #include <span>
+#include <set>
 #include <memory>
 #include <vector>
 #include <cassert>
@@ -65,5 +66,6 @@ struct SCIPicParser {
     PaletteColor _color{ 0, 0 };
     uint8_t _patternFlags{ 0 };
     Palette _palette;
+    std::set<uint8_t> _lockedColors;
     EGAImage _bmp;
 };

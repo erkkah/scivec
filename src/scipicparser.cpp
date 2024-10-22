@@ -56,9 +56,14 @@ void SCIPicParser::parse(int limit) {
 
         switch (cmd) {
             case setVisualColor: {
-                const auto colorCode = read();
+                auto colorCode = read();
                 if (colorCode > 159) {
                     throw std::runtime_error("Invalid color index");
+                }
+
+                auto index = colorCode % 40;
+                if (_lockedColors.contains(index)) {
+                    colorCode = index;
                 }
                 _color = _palette.get(colorCode);
 
@@ -160,6 +165,7 @@ bool SCIPicParser::atEnd() const {
 
 void SCIPicParser::reset() {
     _pos = 0;
+    _lockedColors.clear();
 }
 
 void SCIPicParser::skip(size_t count) {
@@ -484,6 +490,9 @@ void SCIPicParser::parseExtended(uint8_t cmd) {
                     throw std::runtime_error("Invalid palette entry");
                 }
                 _palette.set(i, { (color & 0xf0) >> 4, color & 0xf });
+                if (i / 40 == 0) {
+                    _lockedColors.insert(i % 40);
+                }
             }
         } break;
 
