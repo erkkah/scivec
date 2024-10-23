@@ -320,10 +320,16 @@ int SCIPicVectorizer::pickColor(int x, int y, int leftColor, std::span<const uin
         { 0, 0, -1, 0 },
         { 0, 0, 0, 1 },
         { 0, 0, 0, -1 },
+
         { 1, 0, 1, 0 },
         { -2, 0, 1, 0 },
         { 0, 1, 0, 1 },
         { 0, -2, 0, 1 },
+
+        { 2, 0, 1, 0 },
+        { -3, 0, 1, 0 },
+        { 0, 2, 0, 1 },
+        { 0, -3, 0, 1 },
     };
 
     std::map<int, int> counts;
@@ -360,7 +366,7 @@ int SCIPicVectorizer::pickColor(int x, int y, int leftColor, std::span<const uin
         }
     }
 
-    constexpr int sameColorBias = 3;
+    constexpr int sameColorBias = 2;
 
     if (counts.contains(leftColor)) {
         counts[leftColor] += sameColorBias;
