@@ -517,22 +517,54 @@ void SCIPicVectorizer::scan() {
         _sortedAreas.push_back(kv.second);
     }
 
-    int candidates = 0;
-    auto a0 = _sortedAreas.front();
-    for (auto a = _sortedAreas.begin()++; a != _sortedAreas.end(); a++) {
-        if (a->runs().size() == 1 && a->runs().front().length == 1 &&
-            singlePixelRunMatchesArea(a->runs().front(), a0, _colors)) {
-            candidates++;
+    printf("Scanning single-pixel areas\n");
+
+    std::set<PixelAreaID> erased;
+
+    for (auto a = _sortedAreas.begin(); a != _sortedAreas.end(); a++) {
+        if (a->runs().size() == 1 && a->runs().front().length == 1) {
+            auto& run = a->runs().front();
+            auto* left = areaAt(run.start - 1, run.row);
+            if (left != nullptr && singlePixelRunMatchesArea(run, *left, _colors)) {
+                erased.insert(a->id());
+                PixelArea pixel(run.row, run.start, left->color());
+                left->merge(pixel);
+                continue;
+            }
+            auto* right = areaAt(run.start + 1, run.row);
+            if (right != nullptr && singlePixelRunMatchesArea(run, *right, _colors)) {
+                erased.insert(a->id());
+                PixelArea pixel(run.row, run.start, right->color());
+                right->merge(pixel);
+                continue;
+            }
+            auto* top = areaAt(run.start, run.row - 1);
+            if (top != nullptr && singlePixelRunMatchesArea(run, *top, _colors)) {
+                erased.insert(a->id());
+                PixelArea pixel(run.row, run.start, top->color());
+                top->merge(pixel);
+                continue;
+            }
+            auto* bottom = areaAt(run.start, run.row + 1);
+            if (bottom != nullptr && singlePixelRunMatchesArea(run, *bottom, _colors)) {
+                erased.insert(a->id());
+                PixelArea pixel(run.row, run.start, bottom->color());
+                bottom->merge(pixel);
+                continue;
+            }
         }
     }
 
-    printf("%d single pixel areas could be eliminated\n", candidates);
+    printf("%zu single pixel areas eliminated\n", erased.size());
 
     _sortedAreas.sort([](const auto& a, const auto& b) {
         return a.color() <= b.color();
     });
 
     for (auto& area : _sortedAreas) {
+        if (erased.contains(area.id())) {
+            continue;
+        }
         const auto& color = _colors.get(area.color());
         if (color.first == 0xf && color.second == 0xf) {
             continue;
@@ -563,8 +595,8 @@ std::vector<SCICommand> SCIPicVectorizer::encode() const {
     return commands;
 }
 
-const PixelArea* SCIPicVectorizer::areaAt(int x, int y) const {
-    for (const auto& area : _sortedAreas) {
+PixelArea* SCIPicVectorizer::areaAt(int x, int y) {
+    for (auto& area : _sortedAreas) {
         if (area.contains(x, y)) {
             return &area;
         }

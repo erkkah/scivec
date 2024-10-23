@@ -92,6 +92,12 @@ struct PixelArea {
         _runs.splice(_runs.end(), other._runs);
     }
 
+    void sort() {
+        _runs.sort([](const PixelRun& a, const PixelRun& b) {
+            return a.row == b.row ? a.start - b.start : a.row - b.row;
+        });
+    }
+
     uint8_t color() const {
         return _color;
     }
@@ -145,7 +151,7 @@ struct SCIPicVectorizer {
 
     void scan();
     std::vector<SCICommand> encode() const;
-    const PixelArea* areaAt(int x, int y) const;
+    PixelArea* areaAt(int x, int y);
 
    private:
     int pickColor(int x, int y, int previousColor, std::span<const uint8_t> previousRow) const;
