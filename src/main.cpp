@@ -76,7 +76,6 @@ void help() {
         "    scivec convert <input image file> <output sci file> [options]\n"
         "        -show        Show converted results\n"
         "        -noverify    Skip verification of converted image\n"
-        "        -nodimcheck  Skip input dimensions check\n"
         "\n"
         "    scivec show <sci file>\n");
 }
@@ -153,12 +152,6 @@ void cmdConvert(Params params, const Flags& flags) {
     if (!flags.contains("-noverify")) {
         auto orig = ei.asBitmap();
         auto converted = parser.bitmap();
-        if (orig->w != converted->w || orig->h != converted->h) {
-            fprintf(stderr, "Input file dimension mismatch\n");
-            if (!flags.contains("-nodimcheck")) {
-                exit(1);
-            }
-        }
         bool equal = true;
 
         for (int y = 0; equal && y < std::min(orig->h, converted->h); y++) {
