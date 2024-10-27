@@ -42,3 +42,35 @@ jobs:
               with:
                   name: binary-${{ matrix.os }}
                   path: build/scivec*
+
+    publish:
+        name: Publish
+        needs: build
+        runs-on: ubuntu-latest
+        if: github.ref_type == 'tag'
+        steps:
+            - name: Set ARCHIVE
+              run: echo ARCHIVE=scivec-${{ github.ref_name }}.tgz >> $GITHUB_ENV
+
+            - name: Set TAG
+              run: echo TAG=${GITHUB_REF:10} >> $GITHUB_ENV
+
+            - uses: actions/download-artifact@4
+              with:
+                  path: scivec
+
+            - run: chmod a+x scivec/*/scivec
+            - run: ls -R scivec
+
+            - name: Create archive
+              run: tar czf ${ARCHIVE} -C scivec .
+
+            - name: Publish
+              uses: softprops/action-gh-release@v2
+              with:
+                  token: ${{ secrets.GITHUB_TOKEN }}
+                  files: ${{ env.ARCHIVE }}
+                  tag_name: ${{ github.ref }}
+                  name: ${{ env.TAG }}
+                  body: ""
+                  draft: true
