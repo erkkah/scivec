@@ -487,7 +487,9 @@ void encodeAreaLines(const PixelArea& area, std::vector<SCICommand>& sink) {
 }
 
 void encodeAreaPixels(const PixelArea& area, std::vector<SCICommand>& sink) {
-    sink.push_back(encodePatterns(area.pixels()));
+    if (!area.pixels().empty()) {
+        encodePatterns(area.pixels(), sink);
+    }
 }
 
 void encodeAreaFills(const PixelArea& area, std::vector<SCICommand>& sink) {
