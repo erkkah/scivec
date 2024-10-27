@@ -34,6 +34,9 @@ enum SCIExtendedCommandCode {
     setPriorityBands = 8,
 };
 
+constexpr uint8_t patternFlagRectangle = 0x10;
+constexpr uint8_t patternFlagUsePattern = 0x20;
+
 struct Point {
     Point() = default;
     Point(const Point& other) = default;

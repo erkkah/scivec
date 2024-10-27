@@ -16,24 +16,10 @@ struct PixelRun {
     PixelRun(int row, int start, int length, uint8_t color) : row(row), start(start), length(length), color(color) {
     }
 
-    // ??? Add feathering?
-    // bool overlaps(const PixelRun& other) const {
-    //     return (other.color == color) &&
-    //            ((other.start >= start && other.start < start + length) ||
-    //                (other.start + other.length - 1 >= start && other.start + other.length - 1 < start + length));
-    // }
-
     void extendTo(int column) {
         assert(column >= start);
         length = column - start + 1;
     }
-
-    // void swap(PixelRun& other) {
-    //     std::swap(row, other.row);
-    //     std::swap(start, other.start);
-    //     std::swap(length, other.length);
-    //     std::swap(color, other.color);
-    // }
 
     int row;
     int start;
@@ -70,7 +56,6 @@ struct PixelArea {
     PixelArea() = default;
 
     bool contains(int x, int y) const {
-        // Use a map?
         for (const auto& run : _runs) {
             if (run.row != y) {
                 continue;
@@ -82,12 +67,21 @@ struct PixelArea {
         return false;
     }
 
+    bool singular() const {
+        return _runs.size() == 1 && _runs.front().length == 1;
+    }
+
+    bool solid() const;
+
     void extendLastRunTo(int column) {
         assert(!_runs.empty());
         _runs.back().extendTo(column);
     }
 
     void merge(PixelArea& other) {
+        assert(this != &other);
+        assert(!other.empty());
+        assert(!empty());
         assert(_color == other._color);
         _runs.splice(_runs.end(), other._runs);
     }
@@ -115,6 +109,10 @@ struct PixelArea {
     void fillWithLines();
     void traceLines(const ByteImage& source);
     void optimizeLines();
+    void setPixels(const std::list<Point>& pixels) {
+        assert(_pixels.empty());
+        _pixels.insert(_pixels.end(), pixels.begin(), pixels.end());
+    }
     void findFills(PaletteImage& canvas, uint8_t bg);
 
     const std::list<PixelRun>& runs() const {
@@ -125,6 +123,11 @@ struct PixelArea {
         return _top;
     }
 
+    int left() const {
+        assert(!_runs.empty());
+        return _runs.front().start;
+    }
+
     std::span<const Line> lines() const {
         return _lines;
     }
@@ -133,11 +136,16 @@ struct PixelArea {
         return _fills;
     }
 
+    std::span<const Point> pixels() const {
+        return _pixels;
+    }
+
    private:
     int _top{ 0 };
     std::uint8_t _color;
     std::list<PixelRun> _runs;
     std::vector<Line> _lines;
+    std::vector<Point> _pixels;
     std::vector<Point> _fills;
     bool _closed{ false };
 };

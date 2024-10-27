@@ -150,6 +150,19 @@ void encodeMultiLine(std::span<const Point> coordinates, std::vector<SCICommand>
     }
 }
 
+SCICommand encodeSolidCirclePattern(uint8_t size) {
+    return SCICommand{ .code = SCICommandCode::setPattern, .params = { size } };
+}
+
+SCICommand encodePatterns(std::span<const Point> coordinates) {
+    std::vector<uint8_t> params;
+    for (const auto& c : coordinates) {
+        auto coordData = encodeCoordinate(c.x, c.y);
+        params.insert(params.end(), coordData.begin(), coordData.end());
+    }
+    return SCICommand{ .code = SCICommandCode::longPatterns, .params = params };
+}
+
 SCICommand encodeFill(int x, int y) {
     return SCICommand{ .code = SCICommandCode::floodFill, .params = encodeCoordinate(x, y) };
 }

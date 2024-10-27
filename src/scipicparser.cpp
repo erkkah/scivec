@@ -34,9 +34,6 @@ std::string hex(int value) {
     return "0x" + str.str();
 }
 
-constexpr uint8_t patternFlagRectangle = 0x10;
-constexpr uint8_t patternFlagUsePattern = 0x20;
-
 }  // namespace
 
 void SCIPicParser::parse(int limit) {

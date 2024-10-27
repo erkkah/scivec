@@ -7,6 +7,19 @@
 #include <map>
 #include <vector>
 
+bool PixelArea::solid() const {
+    int lastRow = -1;
+
+    for (const auto& run : _runs) {
+        if (run.row == lastRow) {
+            return false;
+        }
+        lastRow = run.row;
+    }
+
+    return true;
+}
+
 void PixelArea::fillWithLines() {
     // ??? Simple, stupid line fill
     for (const auto& run : _runs) {
@@ -473,6 +486,10 @@ void encodeAreaLines(const PixelArea& area, std::vector<SCICommand>& sink) {
     }
 }
 
+void encodeAreaPixels(const PixelArea& area, std::vector<SCICommand>& sink) {
+    sink.push_back(encodePatterns(area.pixels()));
+}
+
 void encodeAreaFills(const PixelArea& area, std::vector<SCICommand>& sink) {
     for (const auto& fill : area.fills()) {
         sink.push_back(encodeFill(fill.x, fill.y));
@@ -492,6 +509,7 @@ void encodeAreas(const std::list<PixelArea>& areas, std::vector<SCICommand>& sin
             currentColor = area.color();
             sink.push_back(encodeVisual(currentColor));
         }
+        encodeAreaPixels(area, sink);
         encodeAreaLines(area, sink);
         encodeAreaFills(area, sink);
     }
@@ -515,9 +533,6 @@ void SCIPicVectorizer::scan() {
         scanRow(y, rowMemory);
     }
 
-    PaletteImage canvas(_source.width(), _source.height(), _colors);
-    canvas.clear(0xf);
-
     for (auto& kv : _areaMap) {
         assert(!kv.second.empty());
         _sortedAreas.push_back(kv.second);
@@ -525,35 +540,35 @@ void SCIPicVectorizer::scan() {
 
     printf("Scanning single-pixel areas\n");
 
-    std::set<PixelAreaID> erased;
+    std::set<PixelAreaID> erasedAreas;
 
     for (auto a = _sortedAreas.begin(); a != _sortedAreas.end(); a++) {
-        if (a->runs().size() == 1 && a->runs().front().length == 1) {
+        if (a->singular()) {
             auto& run = a->runs().front();
             auto* left = areaAt(run.start - 1, run.row);
             if (left != nullptr && singlePixelRunMatchesArea(run, *left, _colors)) {
-                erased.insert(a->id());
+                erasedAreas.insert(a->id());
                 PixelArea pixel(run.row, run.start, left->color());
                 left->merge(pixel);
                 continue;
             }
             auto* right = areaAt(run.start + 1, run.row);
             if (right != nullptr && singlePixelRunMatchesArea(run, *right, _colors)) {
-                erased.insert(a->id());
+                erasedAreas.insert(a->id());
                 PixelArea pixel(run.row, run.start, right->color());
                 right->merge(pixel);
                 continue;
             }
             auto* top = areaAt(run.start, run.row - 1);
             if (top != nullptr && singlePixelRunMatchesArea(run, *top, _colors)) {
-                erased.insert(a->id());
+                erasedAreas.insert(a->id());
                 PixelArea pixel(run.row, run.start, top->color());
                 top->merge(pixel);
                 continue;
             }
             auto* bottom = areaAt(run.start, run.row + 1);
             if (bottom != nullptr && singlePixelRunMatchesArea(run, *bottom, _colors)) {
-                erased.insert(a->id());
+                erasedAreas.insert(a->id());
                 PixelArea pixel(run.row, run.start, bottom->color());
                 bottom->merge(pixel);
                 continue;
@@ -561,14 +576,32 @@ void SCIPicVectorizer::scan() {
         }
     }
 
-    printf("%zu single pixel areas eliminated\n", erased.size());
+    printf("%zu single pixel areas eliminated.\n", erasedAreas.size());
+
+    std::set<PixelAreaID> singlePixelAreas;
+    for (auto it = _sortedAreas.begin(); it != _sortedAreas.end();) {
+        if (erasedAreas.contains(it->id())) {
+            it = _sortedAreas.erase(it);
+        } else {
+            if (it->singular()) {
+                singlePixelAreas.insert(it->id());
+            }
+            ++it;
+        }
+    }
 
     _sortedAreas.sort([](const auto& a, const auto& b) {
         return a.color() <= b.color();
     });
 
+    int simpleFills = 0;
+    int solids = 0;
+
+    std::set<PixelAreaID> areasToFill;
+
+    // First pass, lines only
     for (auto& area : _sortedAreas) {
-        if (erased.contains(area.id())) {
+        if (erasedAreas.contains(area.id()) || singlePixelAreas.contains(area.id())) {
             continue;
         }
         const auto& color = _colors.get(area.color());
@@ -577,9 +610,64 @@ void SCIPicVectorizer::scan() {
         }
         if (color.first == 0xf || color.second == 0xf) {
             area.fillWithLines();
+            if (area.solid()) {
+                solids++;
+            }
+            simpleFills++;
         } else {
             area.traceLines(_paletteImage);
             area.optimizeLines();
+            areasToFill.insert(area.id());
+        }
+    }
+
+    printf("%d areas simple filled, %d solid\n", simpleFills, solids);
+
+    PaletteImage canvas(_source.width(), _source.height(), _colors);
+    canvas.clear(0xf);
+
+    if (!singlePixelAreas.empty()) {
+        std::list<Point> pixels;
+        auto a0 = _sortedAreas.begin();
+        while (a0 != _sortedAreas.end() && !singlePixelAreas.contains(a0->id())) {
+            a0++;
+        }
+        pixels.emplace_back(a0->left(), a0->top());
+
+        // Second pass, single-pixel areas
+        auto area = a0;
+        area++;
+        for (; area != _sortedAreas.end(); area++) {
+            if (!singlePixelAreas.contains(area->id())) {
+                continue;
+            }
+            assert(area->singular());
+            if (area->color() != a0->color()) {
+                a0->setPixels(pixels);
+                pixels.clear();
+                pixels.emplace_back(area->left(), area->top());
+                a0 = area;
+            } else {
+                pixels.emplace_back(area->left(), area->top());
+                a0->merge(*area);
+            }
+        }
+        if (!pixels.empty()) {
+            a0->setPixels(pixels);
+        }
+    }
+
+    // Third pass, fills
+    for (auto& area : _sortedAreas) {
+        if (area.empty()) {
+            continue;
+        }
+        if (singlePixelAreas.contains(area.id())) {
+            for (const auto& p : area.pixels()) {
+                canvas.put(p.x, p.y, area.color());
+            }
+        }
+        if (areasToFill.contains(area.id())) {
             area.findFills(canvas, 0xf);
         }
     }
@@ -589,6 +677,7 @@ std::vector<SCICommand> SCIPicVectorizer::encode() const {
     std::vector<SCICommand> commands;
 
     encodeColors(_colors, commands);
+    commands.push_back(encodeSolidCirclePattern(0));
     encodeAreas(_sortedAreas, commands);
     printf("Produced %zu commands\n", commands.size());
 
