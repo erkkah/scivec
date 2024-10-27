@@ -126,6 +126,7 @@ void cmdConvert(Params params, const Flags& flags) {
 
     const EGAImage ei(*bmp);
 
+    fprintf(stderr, "Converting...\n");
     auto vec = SCIPicVectorizer(ei);
     vec.scan();
     auto commands = vec.encode();
