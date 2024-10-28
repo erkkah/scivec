@@ -5,6 +5,7 @@ on:
         branches-ignore:
             - "test-*"
         tags-ignore:
+            - test*
     workflow_dispatch:
 
 concurrency:
