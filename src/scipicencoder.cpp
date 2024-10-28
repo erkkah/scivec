@@ -16,7 +16,7 @@ SCICommand encodeVisual(uint8_t color) {
 
 namespace {
 
-void encodeShortLines(std::span<const Point> coordinates, std::vector<SCICommand>& sink) {
+void encodeShortCommand(SCICommandCode command, std::span<const Point> coordinates, std::vector<SCICommand>& sink) {
     assert(coordinates.size() > 1);
     auto p0 = coordinates.front();
     std::vector<uint8_t> params = encodeCoordinate(p0.x, p0.y);
@@ -25,7 +25,7 @@ void encodeShortLines(std::span<const Point> coordinates, std::vector<SCICommand
         auto xDiff = p.x - p0.x;
         auto yDiff = p.y - p0.y;
 
-        assert(xDiff > -8 && xDiff < 8);
+        assert(xDiff > -7 && xDiff < 8);
         assert(yDiff > -8 && yDiff < 8);
 
         uint8_t delta = std::abs(xDiff) << 4;
@@ -41,10 +41,10 @@ void encodeShortLines(std::span<const Point> coordinates, std::vector<SCICommand
         p0 = p;
     }
 
-    sink.push_back(SCICommand{ .code = SCICommandCode::shortRelativeLines, .params = params });
+    sink.push_back(SCICommand{ .code = command, .params = params });
 }
 
-void encodeMediumLines(std::span<const Point> coordinates, std::vector<SCICommand>& sink) {
+void encodeMediumCommand(SCICommandCode command, std::span<const Point> coordinates, std::vector<SCICommand>& sink) {
     assert(coordinates.size() > 1);
     auto p0 = coordinates.front();
     std::vector<uint8_t> params = encodeCoordinate(p0.x, p0.y);
@@ -60,15 +60,17 @@ void encodeMediumLines(std::span<const Point> coordinates, std::vector<SCIComman
         if (yDiff < 0) {
             yDelta |= 0x80;
         }
+        assert(yDelta < 0xf0);
+        assert(xDiff < 0xf0);
         params.push_back(yDelta);
         params.push_back(xDiff);
         p0 = p;
     }
 
-    sink.push_back(SCICommand{ .code = SCICommandCode::mediumRelativeLines, .params = params });
+    sink.push_back(SCICommand{ .code = command, .params = params });
 }
 
-void encodeLongLines(std::span<const Point> coordinates, std::vector<SCICommand>& sink) {
+void encodeLongCommand(SCICommandCode command, std::span<const Point> coordinates, std::vector<SCICommand>& sink) {
     std::vector<uint8_t> params;
 
     for (const auto& coord : coordinates) {
@@ -76,43 +78,74 @@ void encodeLongLines(std::span<const Point> coordinates, std::vector<SCICommand>
         params.insert(params.end(), coordinateData.begin(), coordinateData.end());
     }
 
-    sink.push_back(SCICommand{ .code = SCICommandCode::longLines, .params = params });
+    sink.push_back(SCICommand{ .code = command, .params = params });
 }
 
-enum class LineMode { shortLine, mediumLine, longLine };
+enum class CoordinateMode { shortCoord, mediumCoord, longCoord };
 
-LineMode modeFromPoints(const Point& p0, const Point& p1) {
+CoordinateMode modeFromPoints(const Point& p0, const Point& p1) {
     auto xDistance = std::abs(p0.x - p1.x);
-    auto yDistance = std::abs(p0.y - p1.y);
+    auto yVector = p1.y - p0.y;
+    auto yDistance = std::abs(yVector);
     auto distance = std::max(xDistance, yDistance);
 
     // short encodes
-    // -6 <= y <= 7
-    // -7 <= x <= 7
+    // -6 <= x <= 7
+    // -7 <= y <= 7
     if (distance < 7) {
-        return LineMode::shortLine;
+        return CoordinateMode::shortCoord;
     }
 
     // medium encodes
-    // -127 <= y <= 127
     // -128 <= x <= 127
-    if (distance < 128) {
-        return LineMode::mediumLine;
+    // -111 <= y <= 127
+    // 112 + 128 (sign bit) = 240 == 0xf0, which must be avoided
+    if (yVector > -111 && distance < 128) {
+        return CoordinateMode::mediumCoord;
     }
 
-    return LineMode::longLine;
+    return CoordinateMode::longCoord;
 }
 
-void encodeLineSegment(std::span<const Point> coordinates, LineMode mode, std::vector<SCICommand>& sink) {
+SCICommandCode lineCodeFromMode(CoordinateMode mode) {
     switch (mode) {
-        case LineMode::longLine:
-            encodeLongLines(coordinates, sink);
+        case CoordinateMode::shortCoord:
+            return SCICommandCode::shortRelativeLines;
+        case CoordinateMode::mediumCoord:
+            return SCICommandCode::mediumRelativeLines;
+        case CoordinateMode::longCoord:
+            return SCICommandCode::longLines;
+        default:
+            assert(false);
+    }
+}
+
+SCICommandCode patternCodeFromMode(CoordinateMode mode) {
+    switch (mode) {
+        case CoordinateMode::shortCoord:
+            return SCICommandCode::shortRelativePatterns;
+        case CoordinateMode::mediumCoord:
+            return SCICommandCode::mediumRelativePatterns;
+        case CoordinateMode::longCoord:
+            return SCICommandCode::longPatterns;
+        default:
+            assert(false);
+    }
+}
+
+void encodeSegment(SCICommandCode command,
+    std::span<const Point> coordinates,
+    CoordinateMode mode,
+    std::vector<SCICommand>& sink) {
+    switch (mode) {
+        case CoordinateMode::longCoord:
+            encodeLongCommand(command, coordinates, sink);
             break;
-        case LineMode::mediumLine:
-            encodeMediumLines(coordinates, sink);
+        case CoordinateMode::mediumCoord:
+            encodeMediumCommand(command, coordinates, sink);
             break;
-        case LineMode::shortLine:
-            encodeShortLines(coordinates, sink);
+        case CoordinateMode::shortCoord:
+            encodeShortCommand(command, coordinates, sink);
             break;
     }
 }
@@ -136,7 +169,7 @@ void encodeMultiLine(std::span<const Point> coordinates, std::vector<SCICommand>
         if (mode == currentMode) {
             segment.push_back(p1);
         } else {
-            encodeLineSegment(segment, currentMode, sink);
+            encodeSegment(lineCodeFromMode(currentMode), segment, currentMode, sink);
             segment.clear();
             segment.push_back(p0);
             segment.push_back(p1);
@@ -146,8 +179,30 @@ void encodeMultiLine(std::span<const Point> coordinates, std::vector<SCICommand>
     }
 
     if (!segment.empty()) {
-        encodeLineSegment(segment, currentMode, sink);
+        encodeSegment(lineCodeFromMode(currentMode), segment, currentMode, sink);
     }
+}
+
+SCICommand encodeSolidCirclePattern(uint8_t size) {
+    return SCICommand{ .code = SCICommandCode::setPattern, .params = { size } };
+}
+
+void encodePatterns(std::span<const Point> coordinates, std::vector<SCICommand>& sink) {
+    assert(!coordinates.empty());
+
+    auto p0 = coordinates[0];
+    auto currentMode = coordinates.size() == 1 ? CoordinateMode::longCoord : CoordinateMode::shortCoord;
+
+    for (auto p = coordinates.begin() + 1; currentMode != CoordinateMode::longCoord && p != coordinates.end(); p++) {
+        auto p1 = *p;
+        const auto mode = modeFromPoints(p0, p1);
+        if (mode > currentMode) {
+            currentMode = mode;
+        }
+        p0 = p1;
+    }
+
+    encodeSegment(patternCodeFromMode(currentMode), coordinates, currentMode, sink);
 }
 
 SCICommand encodeFill(int x, int y) {

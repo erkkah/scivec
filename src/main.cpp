@@ -76,7 +76,6 @@ void help() {
         "    scivec convert <input image file> <output sci file> [options]\n"
         "        -show        Show converted results\n"
         "        -noverify    Skip verification of converted image\n"
-        "        -nodimcheck  Skip input dimensions check\n"
         "\n"
         "    scivec show <sci file>\n");
 }
@@ -127,6 +126,7 @@ void cmdConvert(Params params, const Flags& flags) {
 
     const EGAImage ei(*bmp);
 
+    fprintf(stderr, "Converting...\n");
     auto vec = SCIPicVectorizer(ei);
     vec.scan();
     auto commands = vec.encode();
@@ -153,23 +153,25 @@ void cmdConvert(Params params, const Flags& flags) {
     if (!flags.contains("-noverify")) {
         auto orig = ei.asBitmap();
         auto converted = parser.bitmap();
-        if (orig->w != converted->w || orig->h != converted->h) {
-            fprintf(stderr, "Input file dimension mismatch\n");
-            if (!flags.contains("-nodimcheck")) {
-                exit(1);
-            }
-        }
-        for (int y = 0; y < std::min(orig->h, converted->h); y++) {
-            for (int x = 0; x < std::min(orig->w, converted->w); x++) {
+        bool equal = true;
+
+        for (int y = 0; equal && y < std::min(orig->h, converted->h); y++) {
+            for (int x = 0; equal && x < std::min(orig->w, converted->w); x++) {
                 const auto& o = tigrGet(orig.get(), x, y);
                 const auto& c = tigrGet(converted.get(), x, y);
                 if (o.a != c.a || o.r != c.r || o.g != c.g || o.b != c.b) {
-                    fprintf(stderr, "Parsed file not equal to original\n");
-                    exit(1);
+                    equal = false;
                 }
             }
         }
-        fprintf(stderr, "Conversion verifies OK\n");
+        if (!equal) {
+            fprintf(stderr, "Parsed file not equal to original\n");
+            if (!flags.contains("-show")) {
+                exit(1);
+            }
+        } else {
+            fprintf(stderr, "Conversion verifies OK\n");
+        }
     }
 
     if (flags.contains("-show")) {
@@ -223,7 +225,12 @@ void cmdConvert(Params params, const Flags& flags) {
                             second.r,
                             second.g,
                             second.b);
-                        printf("Lines:\n");
+                        printf("Pixels:\n");
+                        for (const auto& pixel : area->pixels()) {
+                            printf("(%d,%d)", pixel.x, pixel.y);
+                        }
+
+                        printf("\nLines:\n");
                         for (const auto& line : area->lines()) {
                             for (const auto& point : line.points()) {
                                 printf("(%d,%d)", point.x, point.y);
@@ -231,8 +238,8 @@ void cmdConvert(Params params, const Flags& flags) {
                             printf("\n");
                         }
                         printf("\nFills:\n");
-                        for (const auto& line : area->fills()) {
-                            printf("(%d,%d)", line.x, line.y);
+                        for (const auto& fill : area->fills()) {
+                            printf("(%d,%d)", fill.x, fill.y);
                         }
                         printf("\n");
                     }
