@@ -2,11 +2,10 @@ name: SCIVEC app
 
 on:
     push:
-        branches-ignore:
-            - "test-*"
-        tags-ignore:
-            - test*
-    workflow_dispatch:
+        branches:
+            - main
+        tags:
+            - v*
 
 concurrency:
     group: ${{ github.workflow }}-${{ github.ref }}
