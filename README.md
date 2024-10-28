@@ -22,7 +22,7 @@ To show a SCI0 picture file:
 scivec show pic.123
 ```
 
-Downloads are provided on the [releases](releases) page.
+Binaries are provided on the [releases](https://github.com/erkkah/scivec/releases) page.
 
 ## Details
 
@@ -40,7 +40,7 @@ The resulting SCI picture resource is then loaded and rendered to make sure the 
 
 ## Troubleshooting
 
-If the tool fails to convert a bitmap, [please report a bug](issues).
+If the tool fails to convert a bitmap, [please report a bug](https://github.com/erkkah/scivec/issues).
 
 If the tool reports "Parsed file not equal to original", you can add the `-noverify` flag to the `convert` command to let the tool continue anyway.
 
